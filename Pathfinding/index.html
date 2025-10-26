@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador Pathfinding</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>Simulador de Pathfinding</h1>
+    
+    <div class="canvas-container">
+        <canvas id="gridCanvas" width="800" height="600"></canvas>
+    </div>
+    
+    <div class="info">
+        <h3>Instrucciones:</h3>
+        <ul>
+            <li><strong>Click izquierdo (mantener):</strong> Pintar/borrar obstáculos al arrastrar</li>
+            <li><strong>Click derecho (mantener):</strong> Seleccionar inicio o destino para mover</li>
+        </ul>
+        
+        <div class="color-legend">
+            <div class="color-item">
+                <div class="color-box" style="background-color: #666;"></div>
+                <span>Agente (Vehículo)</span>
+            </div>
+            <div class="color-item">
+                <div class="color-box" style="background-color: #FF5722;"></div>
+                <span>Destino</span>
+            </div>
+            <div class="color-item">
+                <div class="color-box" style="background-color: #FFFFFF;"></div>
+                <span>Obstáculo</span>
+            </div>
+        </div>
+    </div>
+    
+    <script src="pathfinding.js"></script>
+</body>
+</html>
+
+
