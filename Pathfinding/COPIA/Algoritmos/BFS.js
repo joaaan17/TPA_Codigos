@@ -107,6 +107,10 @@ function initStepByStepBFS(start, end, canvas, CELL_SIZE, obstacles, callback) {
 
 // Ejecutar un paso del algoritmo BFS
 function stepBFSSearch() {
+    if (!bfsState) {
+        return;
+    }
+    
     if (bfsState.complete) {
         return;
     }
