@@ -18,6 +18,24 @@
 <body>
     <h1>Simulador de Pathfinding</h1>
     
+    <!-- Panel de configuración del terreno -->
+    <div class="terrain-panel">
+        <div class="terrain-config-card">
+            <div class="terrain-controls-row">
+                <div class="control-group">
+                    <label for="terrainSelect">Tipo de terreno:</label>
+                    <select id="terrainSelect" class="heuristic-select">
+                        <option value="empty">Vacío</option>
+                        <option value="random">30% Obstáculos Aleatorios</option>
+                        <option value="random50">50% Obstáculos Aleatorios</option>
+                        <option value="maze">Laberinto Complejo</option>
+                    </select>
+                </div>
+                <button id="generateTerrainBtn" class="terrain-button">Generar Terreno</button>
+            </div>
+        </div>
+    </div>
+    
     <div class="canvas-container">
         <canvas id="gridCanvas" width="800" height="600"></canvas>
     </div>
@@ -46,41 +64,26 @@
             </div>
         </div>
         
-        <div class="chart-control-card">
-            <h3>Gráfico:</h3>
+        <div class="flocking-card">
+            <h3>Comportamiento de manada:</h3>
             <div class="control-content">
                 <div class="control-group">
-                    <label for="chartNameInput">Nombre en gráfico:</label>
-                    <input type="text" id="chartNameInput" class="heuristic-select" placeholder="Ej: A* Manhattan">
+                    <label for="numVehiclesInput">Número de vehículos:</label>
+                    <input type="number" id="numVehiclesInput" class="heuristic-select" min="1" max="100" value="5" placeholder="Número de vehículos">
                 </div>
                 <div class="control-group">
-                    <label for="benchmarkAlgorithmSelect">Algoritmo:</label>
-                    <select id="benchmarkAlgorithmSelect" class="heuristic-select">
-                        <option value="astar">A*</option>
-                        <option value="dijkstra">Dijkstra</option>
-                        <option value="bfs">Best-First Search</option>
-                    </select>
-                </div>
-                <div class="control-group" id="benchmarkHeuristicGroup">
-                    <label for="benchmarkHeuristicSelect">Heurística:</label>
-                    <select id="benchmarkHeuristicSelect" class="heuristic-select">
-                        <option value="euclidean">Euclidiana (Octil)</option>
-                        <option value="manhattan">Manhattan</option>
-                    </select>
+                    <label for="fSeparacionInput">FSeparación:</label>
+                    <input type="number" id="fSeparacionInput" class="heuristic-select" min="0" max="100" step="0.1" value="1.0" placeholder="Factor de separación">
                 </div>
                 <div class="control-group">
-                    <label for="gridSizeFromInput">Tamaño desde:</label>
-                    <input type="number" id="gridSizeFromInput" class="heuristic-select" min="5" max="100" value="10" placeholder="Desde">
+                    <label for="fAlineacionInput">FAlineación:</label>
+                    <input type="number" id="fAlineacionInput" class="heuristic-select" min="0" max="100" step="0.1" value="1.0" placeholder="Factor de alineación">
                 </div>
                 <div class="control-group">
-                    <label for="gridSizeToInput">Tamaño hasta:</label>
-                    <input type="number" id="gridSizeToInput" class="heuristic-select" min="5" max="100" value="30" placeholder="Hasta">
+                    <label for="fCohesionInput">FCohesión:</label>
+                    <input type="number" id="fCohesionInput" class="heuristic-select" min="0" max="100" step="0.1" value="1.0" placeholder="Factor de cohesión">
                 </div>
-                <div class="control-group">
-                    <label for="chartColorInput">Color de la línea:</label>
-                    <input type="color" id="chartColorInput" value="#667eea" style="width: 100%; height: 40px; border-radius: 5px; border: 2px solid #3a3a4e; cursor: pointer;">
-                </div>
-                <button id="benchmarkBtn" class="benchmark-button">Generar Benchmark</button>
+                <button id="startFlockingBtn" class="flocking-button">Iniciar Manada</button>
             </div>
         </div>
         
@@ -124,16 +127,59 @@
         </div>
     </div>
     
-    <div class="chart-container" id="chartContainer">
-        <h3>Análisis de Rendimiento</h3>
-        <div id="performanceChart" style="width: 100%; height: 400px;"></div>
+    <div class="chart-section">
+        <div class="chart-control-card">
+            <h3>Gráfico:</h3>
+            <div class="control-content">
+                <div class="control-group">
+                    <label for="chartNameInput">Nombre en gráfico:</label>
+                    <input type="text" id="chartNameInput" class="heuristic-select" placeholder="Ej: A* Manhattan">
+                </div>
+                <div class="control-group">
+                    <label for="benchmarkAlgorithmSelect">Algoritmo:</label>
+                    <select id="benchmarkAlgorithmSelect" class="heuristic-select">
+                        <option value="astar">A*</option>
+                        <option value="dijkstra">Dijkstra</option>
+                        <option value="bfs">Best-First Search</option>
+                    </select>
+                </div>
+                <div class="control-group" id="benchmarkHeuristicGroup">
+                    <label for="benchmarkHeuristicSelect">Heurística:</label>
+                    <select id="benchmarkHeuristicSelect" class="heuristic-select">
+                        <option value="euclidean">Euclidiana (Octil)</option>
+                        <option value="manhattan">Manhattan</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="gridSizeFromInput">Tamaño desde:</label>
+                    <input type="number" id="gridSizeFromInput" class="heuristic-select" min="5" max="100" value="10" placeholder="Desde">
+                </div>
+                <div class="control-group">
+                    <label for="gridSizeToInput">Tamaño hasta:</label>
+                    <input type="number" id="gridSizeToInput" class="heuristic-select" min="5" max="100" value="30" placeholder="Hasta">
+                </div>
+                <div class="control-group">
+                    <label for="chartColorInput">Color de la línea:</label>
+                    <input type="color" id="chartColorInput" value="#667eea" style="width: 100%; height: 40px; border-radius: 5px; border: 2px solid #3a3a4e; cursor: pointer;">
+                </div>
+                <button id="benchmarkBtn" class="benchmark-button">Generar Benchmark</button>
+            </div>
+        </div>
+        
+        <div class="chart-container" id="chartContainer">
+            <h3>Análisis de Rendimiento</h3>
+            <div id="performanceChart" style="width: 100%; height: 400px;"></div>
+        </div>
     </div>
+    
+    <!-- Contenedor para las visualizaciones del benchmark -->
+    <div id="benchmarkVisualizationsSection" style="max-width: 1600px; width: 100%; margin: 0 auto; padding: 0 20px;"></div>
     
     <script src="Algoritmos/AStar2.js?v=8"></script>
     <script src="Algoritmos/Dijkstra.js?v=8"></script>
     <script src="Algoritmos/BFS.js?v=8"></script>
-    <script src="benchmark.js?v=31"></script>
-    <script src="pathfinding2.js?v=12"></script>
+    <script src="benchmark.js?v=32"></script>
+    <script src="pathfinding2.js?v=18"></script>
 </body>
 </html>
 

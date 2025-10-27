@@ -169,10 +169,173 @@ function init() {
         initializeEmptyChart();
     }
     
+    // Event listener para el botón de generar terreno
+    const generateTerrainBtn = document.getElementById('generateTerrainBtn');
+    if (generateTerrainBtn) {
+        generateTerrainBtn.addEventListener('click', generateTerrain);
+    }
+    
     // Iniciar loop de animación
     animationLoop();
     
     render();
+}
+
+// Función para generar terreno
+function generateTerrain() {
+    const terrainSelect = document.getElementById('terrainSelect');
+    const terrainType = terrainSelect ? terrainSelect.value : 'empty';
+    
+    // Limpiar estado anterior
+    obstacles.clear();
+    currentPath = [];
+    isMoving = false;
+    keepVisualization = false;
+    finalOpenSet.clear();
+    finalClosedSet.clear();
+    
+    // Calcular dimensiones de la grilla
+    const rows = Math.ceil(canvas.height / CONFIG.CELL_SIZE);
+    const cols = Math.ceil(canvas.width / CONFIG.CELL_SIZE);
+    
+    if (terrainType === 'random') {
+        // 30% de obstáculos aleatorios
+        generateRandomObstacles(rows, cols, 0.3);
+    } else if (terrainType === 'random50') {
+        // 50% de obstáculos aleatorios
+        generateRandomObstacles(rows, cols, 0.5);
+    } else if (terrainType === 'maze') {
+        // Laberinto complejo
+        generateComplexMaze(rows, cols);
+    }
+    // Si el terreno es 'empty', los obstáculos ya están limpios
+    
+    // Renderizar
+    render();
+}
+
+// Función auxiliar para generar obstáculos aleatorios
+function generateRandomObstacles(rows, cols, percentage) {
+    const totalCells = rows * cols;
+    const obstacleCount = Math.floor(totalCells * percentage);
+    
+    // Generar obstáculos aleatorios
+    const availableCells = [];
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            // Evitar inicio y destino
+            if ((x === startPos.x && y === startPos.y) || 
+                (x === endPos.x && y === endPos.y)) {
+                continue;
+            }
+            availableCells.push(`${x},${y}`);
+        }
+    }
+    
+    // Mezclar y tomar los primeros obstacleCount
+    for (let i = availableCells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availableCells[i], availableCells[j]] = [availableCells[j], availableCells[i]];
+    }
+    
+    for (let i = 0; i < obstacleCount && i < availableCells.length; i++) {
+        obstacles.add(availableCells[i]);
+    }
+}
+
+// Función para generar un laberinto complejo
+function generateComplexMaze(rows, cols) {
+    // Crear un laberinto con múltiples caminos estrechos y patrones complicados
+    
+    // 1. Crear paredes verticales y horizontales estratégicas
+    // Columnas cada 4 celdas verticalmente
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x += 4) {
+            for (let offset = 0; offset < 3 && x + offset < cols; offset++) {
+                const cellKey = `${x + offset},${y}`;
+                if ((x + offset !== startPos.x || y !== startPos.y) && 
+                    (x + offset !== endPos.x || y !== endPos.y)) {
+                    obstacles.add(cellKey);
+                }
+            }
+            // Dejar un hueco cada cierto espacio
+            if (Math.floor(y / 2) % 2 === 0 && Math.floor(x / 4) % 3 !== 0) {
+                obstacles.delete(`${x},${y}`);
+                obstacles.delete(`${x + 1},${y}`);
+            }
+        }
+    }
+    
+    // 2. Filas cada 3-4 celdas horizontalmente
+    for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y += 4) {
+            for (let offset = 0; offset < 2 && y + offset < rows; offset++) {
+                const cellKey = `${x},${y + offset}`;
+                if ((x !== startPos.x || y + offset !== startPos.y) && 
+                    (x !== endPos.x || y + offset !== endPos.y)) {
+                    obstacles.add(cellKey);
+                }
+            }
+            // Dejar un hueco cada cierto espacio
+            if (Math.floor(x / 3) % 3 !== 0 && Math.floor(y / 4) % 2 !== 0) {
+                obstacles.delete(`${x},${y}`);
+                obstacles.delete(`${x},${y + 1}`);
+            }
+        }
+    }
+    
+    // 3. Agregar obstáculos en diagonal para crear rutas en zigzag
+    for (let y = 2; y < rows; y += 6) {
+        for (let x = 2; x < cols; x += 5) {
+            const cellKey = `${x},${y}`;
+            if ((x !== startPos.x || y !== startPos.y) && 
+                (x !== endPos.x || y !== endPos.y)) {
+                obstacles.add(cellKey);
+            }
+        }
+    }
+    
+    // 4. Crear pasillos estrechos y sinuosos
+    for (let y = 5; y < rows - 5; y++) {
+        for (let x = 5; x < cols - 5; x++) {
+            // Crear un patrón de damero parcialmente obstruido
+            if ((x + y) % 8 === 0 || (x * y) % 11 === 0) {
+                const cellKey = `${x},${y}`;
+                if ((x !== startPos.x || y !== startPos.y) && 
+                    (x !== endPos.x || y !== endPos.y)) {
+                    obstacles.add(cellKey);
+                }
+            }
+        }
+    }
+    
+    // 5. Crear áreas parcialmente bloqueadas cerca de inicio y destino
+    const startRadius = 8;
+    const endRadius = 8;
+    
+    for (let y = Math.max(0, startPos.y - startRadius); y < Math.min(rows, startPos.y + startRadius); y++) {
+        for (let x = Math.max(0, startPos.x - startRadius); x < Math.min(cols, startPos.x + startRadius); x++) {
+            const dist = Math.abs(x - startPos.x) + Math.abs(y - startPos.y);
+            if (dist > 2 && dist < startRadius && Math.random() > 0.3) {
+                const cellKey = `${x},${y}`;
+                if ((x !== startPos.x || y !== startPos.y)) {
+                    obstacles.add(cellKey);
+                }
+            }
+        }
+    }
+    
+    for (let y = Math.max(0, endPos.y - endRadius); y < Math.min(rows, endPos.y + endRadius); y++) {
+        for (let x = Math.max(0, endPos.x - endRadius); x < Math.min(cols, endPos.x + endRadius); x++) {
+            const dist = Math.abs(x - endPos.x) + Math.abs(y - endPos.y);
+            if (dist > 2 && dist < endRadius && Math.random() > 0.3) {
+                const cellKey = `${x},${y}`;
+                if ((x !== endPos.x || y !== endPos.y)) {
+                    obstacles.add(cellKey);
+                }
+            }
+        }
+    }
 }
 
 // Loop de animación para el movimiento del vehículo

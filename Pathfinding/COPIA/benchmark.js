@@ -759,10 +759,16 @@ function createVisualizationContainer(numVisualizations) {
         }
     }
     
-    // Insertar antes del chart container
-    const chartContainer = document.getElementById('chartContainer');
-    if (chartContainer && chartContainer.parentNode) {
-        chartContainer.parentNode.insertBefore(container, chartContainer);
+    // Insertar en el contenedor dedicado
+    const visualizationsSection = document.getElementById('benchmarkVisualizationsSection');
+    if (visualizationsSection) {
+        visualizationsSection.appendChild(container);
+    } else {
+        // Fallback: insertar después de la sección del gráfico
+        const chartSection = document.querySelector('.chart-section');
+        if (chartSection && chartSection.parentNode) {
+            chartSection.parentNode.insertBefore(container, chartSection.nextSibling);
+        }
     }
     
     return container;

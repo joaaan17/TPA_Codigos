@@ -137,14 +137,20 @@ h1 {
     transform: scale(0.98);
 }
 
-.chart-container {
+.chart-section {
+    display: flex;
+    gap: 20px;
+    max-width: 1600px;
+    width: 100%;
     margin: 20px auto;
+}
+
+.chart-container {
+    flex: 1;
     padding: 20px;
     background-color: #2a2a3e;
     border-radius: 12px;
     border: 1px solid #3a3a4e;
-    max-width: 1200px;
-    width: 100%;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
@@ -213,8 +219,69 @@ h1 {
     font-family: 'Montserrat', sans-serif;
     font-weight: 400;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    flex: 0 1 300px;
+    flex: 0 0 300px;
     min-width: 250px;
+}
+
+.terrain-panel {
+    max-width: 1600px;
+    width: 100%;
+    margin: 20px auto 20px auto;
+    padding: 0 20px;
+}
+
+.terrain-config-card {
+    padding: 15px 20px;
+    background-color: #2a2a3e;
+    border-radius: 12px;
+    border: 1px solid #3a3a4e;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 400;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.terrain-controls-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-end;
+}
+
+.terrain-controls-row .control-group {
+    flex: 1;
+    margin: 0;
+}
+
+.terrain-controls-row .control-group label {
+    margin-bottom: 8px;
+}
+
+.terrain-config-card h3 {
+    margin-top: 0;
+    color: #ffffff;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.terrain-button {
+    background-color: #10b981;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1rem;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 500;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.1s;
+}
+
+.terrain-button:hover {
+    background-color: #0ea86e;
+}
+
+.terrain-button:active {
+    transform: scale(0.98);
 }
 
 .control-content {
@@ -266,6 +333,47 @@ h1 {
 
 .control-group.hidden {
     display: none;
+}
+
+.flocking-card {
+    padding: 20px;
+    background-color: #2a2a3e;
+    border-radius: 12px;
+    border: 1px solid #3a3a4e;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 400;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    flex: 0 1 400px;
+    min-width: 300px;
+}
+
+.flocking-card h3 {
+    margin-top: 0;
+    color: #ffffff;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.flocking-button {
+    background-color: #ec4899;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1rem;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 500;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.1s;
+}
+
+.flocking-button:hover {
+    background-color: #db2777;
+}
+
+.flocking-button:active {
+    transform: scale(0.98);
 }
 
 .info-card {
