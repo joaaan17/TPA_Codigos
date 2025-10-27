@@ -33,6 +33,9 @@ let openSetVisualization = new Set(); // Conjunto de celdas en la frontera de b�
 let closedSetVisualization = new Set(); // Conjunto de celdas ya exploradas
 let visualizationStepDelay = 20; // Delay en ms entre cada paso de visualización (ajustado para mejor visualización)
 let lastVizStepTime = Date.now(); // Timestamp del último step de visualización
+let keepVisualization = false; // Mantener visualización después de completar la búsqueda
+let finalOpenSet = new Set(); // Visualización final del open set
+let finalClosedSet = new Set(); // Visualización final del closed set
 
 // Configuración de dimensiones del canvas
 const CANVAS_CONFIG = {
@@ -361,6 +364,9 @@ function startPathfinding() {
     // Limpiar estado anterior
     currentPath = [];
     isMoving = false;
+    keepVisualization = false; // Limpiar visualización cuando se inicia nuevo pathfinding
+    finalOpenSet.clear();
+    finalClosedSet.clear();
     
     // Usar el algoritmo A* simple (sin visualización paso a paso)
     currentPath = findPath(startPos, endPos, canvas, CONFIG.CELL_SIZE, obstacles);
@@ -382,8 +388,11 @@ function startVisualization() {
     currentPath = [];
     isMoving = false;
     visualizingSearch = false;
+    keepVisualization = false;
     openSetVisualization.clear();
     closedSetVisualization.clear();
+    finalOpenSet.clear();
+    finalClosedSet.clear();
     
     // Inicializar búsqueda paso a paso según el algoritmo seleccionado
     const algorithmSelect = document.getElementById('algorithmSelect');
@@ -398,6 +407,17 @@ function startVisualization() {
             
             if (typeof stepDijkstraSearch === 'function') {
                 stepDijkstraSearch();
+            }
+        }
+    } else if (selectedAlgorithm === 'bfs') {
+        // Usar Best-First Search
+        if (typeof initStepByStepBFS === 'function') {
+            initStepByStepBFS(startPos, endPos, canvas, CONFIG.CELL_SIZE, obstacles, updateVisualizationCallback);
+            visualizingSearch = true;
+            lastVizStepTime = 0;
+            
+            if (typeof stepBFSSearch === 'function') {
+                stepBFSSearch();
             }
         }
     } else {
@@ -430,15 +450,29 @@ function updateVisualizationCallback(openSet, closedSet, state) {
         closedSetVisualization = typeof getDijkstraClosedSetVisualization === 'function' 
             ? getDijkstraClosedSetVisualization() 
             : closedSet;
+    } else if (selectedAlgorithm === 'bfs') {
+        // Usar las funciones de visualización de BFS
+        openSetVisualization = typeof getBFSOpenSetVisualization === 'function' 
+            ? getBFSOpenSetVisualization() 
+            : openSet;
+        closedSetVisualization = typeof getBFSClosedSetVisualization === 'function' 
+            ? getBFSClosedSetVisualization() 
+            : closedSet;
     } else {
         // Usar las funciones de visualización de A*
         openSetVisualization = openSet;
         closedSetVisualization = closedSet;
     }
     
-    // Si la búsqueda está completa, detener la visualización
+    // Si la búsqueda está completa, guardar visualización final y mantenerla visible
     if (state.complete) {
         visualizingSearch = false;
+        keepVisualization = true; // Mantener visualización visible
+        
+        // Guardar el estado final de la visualización
+        finalOpenSet = new Set(openSetVisualization);
+        finalClosedSet = new Set(closedSetVisualization);
+        
         if (state.found) {
             currentPath = state.path;
         }
@@ -471,6 +505,14 @@ function performVisualizationStep(timestamp) {
         }
         
         if (typeof isDijkstraComplete === 'function' && isDijkstraComplete()) {
+            visualizingSearch = false;
+        }
+    } else if (selectedAlgorithm === 'bfs') {
+        if (typeof stepBFSSearch === 'function') {
+            stepBFSSearch();
+        }
+        
+        if (typeof isBFSComplete === 'function' && isBFSComplete()) {
             visualizingSearch = false;
         }
     } else {
@@ -591,7 +633,7 @@ function render() {
     // 1. Dibujar la cuadrícula
     drawGrid();
     
-    // 2. Si estamos en modo visualización, dibujar celdas exploradas
+    // 2. Si estamos en modo visualización o manteniendo visualización, dibujar celdas exploradas
     if (visualizingSearch) {
         // Dibujar Closed Set (nodos explorados)
         for (const cellKey of closedSetVisualization) {
@@ -604,6 +646,22 @@ function render() {
             const [x, y] = cellKey.split(',').map(Number);
             // Solo dibujar si no está en closed set
             if (!closedSetVisualization.has(cellKey)) {
+                drawCell(x, y, CONFIG.OPEN_SET_COLOR);
+            }
+        }
+    } else if (keepVisualization) {
+        // Mantener visualización final después de completar la búsqueda
+        // Dibujar Closed Set (nodos explorados)
+        for (const cellKey of finalClosedSet) {
+            const [x, y] = cellKey.split(',').map(Number);
+            drawCell(x, y, CONFIG.CLOSED_SET_COLOR);
+        }
+        
+        // Dibujar Open Set (frontera de búsqueda)
+        for (const cellKey of finalOpenSet) {
+            const [x, y] = cellKey.split(',').map(Number);
+            // Solo dibujar si no está en closed set
+            if (!finalClosedSet.has(cellKey)) {
                 drawCell(x, y, CONFIG.OPEN_SET_COLOR);
             }
         }

@@ -331,10 +331,12 @@ function getPath() {
     return searchState ? searchState.path : [];
 }
 
-// Función principal de búsqueda que selecciona entre A* y Dijkstra
+// Función principal de búsqueda que selecciona entre A*, Dijkstra y BFS
 function findPathMain(start, end, canvas, CELL_SIZE, obstacles) {
     if (currentAlgorithm === 'dijkstra' && typeof dijkstraPath === 'function') {
         return dijkstraPath(start, end, canvas, CELL_SIZE, obstacles);
+    } else if (currentAlgorithm === 'bfs' && typeof bestFirstSearchPath === 'function') {
+        return bestFirstSearchPath(start, end, canvas, CELL_SIZE, obstacles);
     } else {
         // 'astar' es el valor por defecto
         return astarPath(start, end, canvas, CELL_SIZE, obstacles);
