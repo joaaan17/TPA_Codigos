@@ -86,6 +86,18 @@ function init() {
         visualizeBtn.addEventListener('click', startVisualization);
     }
     
+    // Event listener para el botón de benchmark
+    const benchmarkBtn = document.getElementById('benchmarkBtn');
+    if (benchmarkBtn) {
+        benchmarkBtn.addEventListener('click', () => {
+            if (typeof runBenchmark === 'function') {
+                runBenchmark();
+            } else {
+                console.error('Función runBenchmark no encontrada');
+            }
+        });
+    }
+    
     // Event listener para el selector de algoritmo
     const algorithmSelect = document.getElementById('algorithmSelect');
     const heuristicGroup = document.getElementById('heuristicGroup');
@@ -126,8 +138,36 @@ function init() {
         });
     }
     
+    // Event listener para el selector de algoritmo del benchmark
+    const benchmarkAlgorithmSelect = document.getElementById('benchmarkAlgorithmSelect');
+    const benchmarkHeuristicGroup = document.getElementById('benchmarkHeuristicGroup');
+    
+    if (benchmarkAlgorithmSelect) {
+        // Función para mostrar/ocultar el selector de heurística del benchmark
+        const updateBenchmarkHeuristicVisibility = () => {
+            const selectedAlgorithm = benchmarkAlgorithmSelect.value;
+            if (benchmarkHeuristicGroup) {
+                if (selectedAlgorithm === 'dijkstra') {
+                    benchmarkHeuristicGroup.classList.add('hidden');
+                } else {
+                    benchmarkHeuristicGroup.classList.remove('hidden');
+                }
+            }
+        };
+        
+        // Ejecutar inicialmente
+        updateBenchmarkHeuristicVisibility();
+        
+        benchmarkAlgorithmSelect.addEventListener('change', updateBenchmarkHeuristicVisibility);
+    }
+    
     // Inicializar posición del vehículo
     vehiclePos = { x: startPos.x, y: startPos.y };
+    
+    // Inicializar gráfica vacía
+    if (typeof initializeEmptyChart === 'function') {
+        initializeEmptyChart();
+    }
     
     // Iniciar loop de animación
     animationLoop();

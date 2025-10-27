@@ -106,6 +106,10 @@ function initStepByStepDijkstra(start, end, canvas, CELL_SIZE, obstacles, callba
 
 // Ejecutar un paso del algoritmo Dijkstra
 function stepDijkstraSearch() {
+    if (!dijkstraState) {
+        return;
+    }
+    
     if (dijkstraState.complete) {
         return;
     }
