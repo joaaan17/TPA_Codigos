@@ -26,7 +26,7 @@ let currentPath = []; // Almacenar el path encontrado
 let vehiclePos = { x: 0, y: 0 }; // Posición actual del vehículo (en coordenadas de celdas)
 let pathIndex = 0; // Índice actual en el path
 let isMoving = false; // Indica si el vehículo se está moviendo
-let animationSpeed = 10; // Velocidad de movimiento (frames por celda)
+let animationSpeed = 20; // Velocidad de movimiento (frames por celda) - incrementado para movimiento más suave
 let frameCount = 0; // Contador de frames para animación suave
 let visualizingSearch = false; // Modo de visualización de búsqueda
 let openSetVisualization = new Set(); // Conjunto de celdas en la frontera de búsqueda
@@ -81,6 +81,46 @@ function init() {
     const visualizeBtn = document.getElementById('visualizeBtn');
     if (visualizeBtn) {
         visualizeBtn.addEventListener('click', startVisualization);
+    }
+    
+    // Event listener para el selector de algoritmo
+    const algorithmSelect = document.getElementById('algorithmSelect');
+    const heuristicGroup = document.getElementById('heuristicGroup');
+    
+    if (algorithmSelect) {
+        // Función para mostrar/ocultar el selector de heurística
+        const updateHeuristicVisibility = () => {
+            const selectedAlgorithm = algorithmSelect.value;
+            if (heuristicGroup) {
+                if (selectedAlgorithm === 'dijkstra') {
+                    heuristicGroup.classList.add('hidden');
+                } else {
+                    heuristicGroup.classList.remove('hidden');
+                }
+            }
+        };
+        
+        // Ejecutar inicialmente
+        updateHeuristicVisibility();
+        
+        algorithmSelect.addEventListener('change', (e) => {
+            const selectedAlgorithm = e.target.value;
+            if (typeof setAlgorithm === 'function') {
+                setAlgorithm(selectedAlgorithm);
+            }
+            updateHeuristicVisibility();
+        });
+    }
+    
+    // Event listener para el selector de heurística
+    const heuristicSelect = document.getElementById('heuristicSelect');
+    if (heuristicSelect) {
+        heuristicSelect.addEventListener('change', (e) => {
+            const selectedHeuristic = e.target.value;
+            if (typeof setHeuristic === 'function') {
+                setHeuristic(selectedHeuristic);
+            }
+        });
     }
     
     // Inicializar posición del vehículo
@@ -345,15 +385,31 @@ function startVisualization() {
     openSetVisualization.clear();
     closedSetVisualization.clear();
     
-    // Inicializar búsqueda paso a paso
-    if (typeof initStepByStepSearch === 'function') {
-        initStepByStepSearch(startPos, endPos, canvas, CONFIG.CELL_SIZE, obstacles, updateVisualizationCallback);
-        visualizingSearch = true;
-        lastVizStepTime = 0; // Resetear para que el primer step se ejecute inmediatamente
-        
-        // Ejecutar el primer step inmediatamente para mostrar el estado inicial
-        if (typeof stepAStarSearch === 'function') {
-            stepAStarSearch();
+    // Inicializar búsqueda paso a paso según el algoritmo seleccionado
+    const algorithmSelect = document.getElementById('algorithmSelect');
+    const selectedAlgorithm = algorithmSelect ? algorithmSelect.value : 'astar';
+    
+    if (selectedAlgorithm === 'dijkstra') {
+        // Usar Dijkstra
+        if (typeof initStepByStepDijkstra === 'function') {
+            initStepByStepDijkstra(startPos, endPos, canvas, CONFIG.CELL_SIZE, obstacles, updateVisualizationCallback);
+            visualizingSearch = true;
+            lastVizStepTime = 0;
+            
+            if (typeof stepDijkstraSearch === 'function') {
+                stepDijkstraSearch();
+            }
+        }
+    } else {
+        // Usar A*
+        if (typeof initStepByStepSearch === 'function') {
+            initStepByStepSearch(startPos, endPos, canvas, CONFIG.CELL_SIZE, obstacles, updateVisualizationCallback);
+            visualizingSearch = true;
+            lastVizStepTime = 0;
+            
+            if (typeof stepAStarSearch === 'function') {
+                stepAStarSearch();
+            }
         }
     }
     
@@ -362,8 +418,23 @@ function startVisualization() {
 
 // Callback para actualizar la visualización durante la búsqueda
 function updateVisualizationCallback(openSet, closedSet, state) {
-    openSetVisualization = openSet;
-    closedSetVisualization = closedSet;
+    // Determinar qué algoritmo está activo
+    const algorithmSelect = document.getElementById('algorithmSelect');
+    const selectedAlgorithm = algorithmSelect ? algorithmSelect.value : 'astar';
+    
+    if (selectedAlgorithm === 'dijkstra') {
+        // Usar las funciones de visualización de Dijkstra
+        openSetVisualization = typeof getDijkstraOpenSetVisualization === 'function' 
+            ? getDijkstraOpenSetVisualization() 
+            : openSet;
+        closedSetVisualization = typeof getDijkstraClosedSetVisualization === 'function' 
+            ? getDijkstraClosedSetVisualization() 
+            : closedSet;
+    } else {
+        // Usar las funciones de visualización de A*
+        openSetVisualization = openSet;
+        closedSetVisualization = closedSet;
+    }
     
     // Si la búsqueda está completa, detener la visualización
     if (state.complete) {
@@ -390,13 +461,26 @@ function performVisualizationStep(timestamp) {
     
     lastVizStepTime = currentTime;
     
-    // Verificar que la función existe
-    if (typeof stepAStarSearch === 'function') {
-        stepAStarSearch();
-    }
+    // Determinar qué algoritmo usar
+    const algorithmSelect = document.getElementById('algorithmSelect');
+    const selectedAlgorithm = algorithmSelect ? algorithmSelect.value : 'astar';
     
-    if (typeof isSearchComplete === 'function' && isSearchComplete()) {
-        visualizingSearch = false;
+    if (selectedAlgorithm === 'dijkstra') {
+        if (typeof stepDijkstraSearch === 'function') {
+            stepDijkstraSearch();
+        }
+        
+        if (typeof isDijkstraComplete === 'function' && isDijkstraComplete()) {
+            visualizingSearch = false;
+        }
+    } else {
+        if (typeof stepAStarSearch === 'function') {
+            stepAStarSearch();
+        }
+        
+        if (typeof isSearchComplete === 'function' && isSearchComplete()) {
+            visualizingSearch = false;
+        }
     }
     
     render();
@@ -447,7 +531,7 @@ function getVehicleDirection() {
         const dx = next.x - current.x;
         const dy = next.y - current.y;
         
-        // Calcular ángulo en radianes
+        // Calcular ángulo en radianes (invertir dy porque el canvas tiene y invertido)
         const angle = Math.atan2(dy, dx);
         return angle;
     }
