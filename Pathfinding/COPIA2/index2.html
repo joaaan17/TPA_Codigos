@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador Pathfinding</title>
+    
+    <!-- Google Fonts - Montserrat -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Plotly.js para gráficas -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>Simulador de Pathfinding</h1>
+    
+    <!-- Paneles de configuración -->
+    <div class="terrain-panel">
+        <div class="terrain-config-card">
+            <div class="terrain-controls-row">
+                <div class="control-group">
+                    <label for="objectiveTypeSelect">Tipo de objetivo:</label>
+                    <select id="objectiveTypeSelect" class="heuristic-select">
+                        <option value="fixed">Objetivo fijo</option>
+                        <option value="moving">Objetivo móvil</option>
+                    </select>
+                </div>
+                <button id="generateObjectiveBtn" class="terrain-button">Aplicar</button>
+            </div>
+        </div>
+        
+        <div class="terrain-config-card">
+            <div class="terrain-controls-row">
+                <div class="control-group">
+                    <label for="terrainSelect">Tipo de terreno:</label>
+                    <select id="terrainSelect" class="heuristic-select">
+                        <option value="empty">Vacío</option>
+                        <option value="random">30% Obstáculos Aleatorios</option>
+                        <option value="random50">50% Obstáculos Aleatorios</option>
+                        <option value="maze">Laberinto Complejo</option>
+                    </select>
+                </div>
+                <button id="generateTerrainBtn" class="terrain-button">Generar Terreno</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="canvas-wrapper">
+        <div class="canvas-container">
+            <canvas id="gridCanvas" width="800" height="600"></canvas>
+        </div>
+        <div class="color-legend-container">
+            <h4>Leyenda de Colores</h4>
+            <div class="color-legend">
+                <div class="color-item">
+                    <div class="color-box" style="background-color: #4CAF50;"></div>
+                    <span>Agente (Vehículo)</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" style="background-color: #FF5722;"></div>
+                    <span>Destino</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" style="background-color: #FFFFFF;"></div>
+                    <span>Obstáculo</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" style="background-color: #FFFF00;"></div>
+                    <span>Path encontrado</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" style="background-color: #40E0D0;"></div>
+                    <span>Frontera de búsqueda</span>
+                </div>
+                <div class="color-item">
+                    <div class="color-box" style="background-color: #4682B4;"></div>
+                    <span>Explorado</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="cards-container">
+        <div class="control-card">
+            <h3>Controles:</h3>
+            <div class="control-content">
+                <div class="control-group">
+                    <label for="algorithmSelect">Algoritmo:</label>
+                    <select id="algorithmSelect" class="heuristic-select">
+                        <option value="astar">A*</option>
+                        <option value="dijkstra">Dijkstra</option>
+                        <option value="bfs">Best-First Search</option>
+                    </select>
+                </div>
+                <div class="control-group" id="heuristicGroup">
+                    <label for="heuristicSelect">Heurística:</label>
+                    <select id="heuristicSelect" class="heuristic-select">
+                        <option value="euclidean">Euclidiana (Octil)</option>
+                        <option value="manhattan">Manhattan</option>
+                    </select>
+                </div>
+                <button id="findPathBtn" class="path-button">Buscar Path</button>
+                <button id="visualizeBtn" class="visualize-button">Visualizar Búsqueda</button>
+            </div>
+        </div>
+        
+        <div class="flocking-card">
+            <h3>Comportamiento de manada:</h3>
+            <div class="control-content">
+                <div class="control-group">
+                    <label for="numVehiclesInput">Número de vehículos:</label>
+                    <input type="number" id="numVehiclesInput" class="heuristic-select" min="1" max="100" value="5" placeholder="Número de vehículos">
+                </div>
+                <div class="control-group">
+                    <label for="fSeparacionInput">FSeparación: <span id="fSeparacionValue">1.0</span></label>
+                    <input type="range" id="fSeparacionInput" class="force-slider" min="0" max="10" step="0.1" value="1.0">
+                </div>
+                <div class="control-group">
+                    <label for="fAlineacionInput">FAlineación: <span id="fAlineacionValue">1.0</span></label>
+                    <input type="range" id="fAlineacionInput" class="force-slider" min="0" max="5" step="0.1" value="1.0">
+                </div>
+                <div class="control-group">
+                    <label for="fCohesionInput">FCohesión: <span id="fCohesionValue">1.0</span></label>
+                    <input type="range" id="fCohesionInput" class="force-slider" min="0" max="3" step="0.1" value="1.0">
+                </div>
+                <button id="startFlockingBtn" class="flocking-button" onclick="if(typeof startFlocking === 'function') { startFlocking(); } else { console.error('startFlocking no está definida'); }">Iniciar Manada</button>
+            </div>
+        </div>
+        
+        <div class="info-card">
+            <h3>Instrucciones:</h3>
+            <ul>
+                <li><strong>Click izquierdo (mantener):</strong> Pintar/borrar obstáculos al arrastrar</li>
+                <li><strong>Click derecho (mantener sobre el objetivo y arrastrar):</strong> Mover punto de inicio o destino</li>
+                <li><strong>"Algoritmo":</strong> Selecciona entre A* (heurística) o Dijkstra (sin heurística)</li>
+                <li><strong>"Heurística":</strong> Solo para A* - Selecciona entre Euclidiana o Manhattan</li>
+                <li><strong>"Buscar Path":</strong> Encuentra el camino y el vehículo se mueve automáticamente</li>
+                <li><strong>"Visualizar Búsqueda":</strong> Muestra cómo explora el algoritmo paso a paso</li>
+                <li><strong>"Iniciar Manada":</strong> Inicia una bandada de vehículos</li>
+                <li><strong>"Objetivo móvil":</strong> El objetivo se mueve en tiempo real con las flechas</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="chart-section">
+        <div class="chart-control-card">
+            <h3>Gráfico:</h3>
+            <div class="control-content">
+                <div class="control-group">
+                    <label for="chartNameInput">Nombre en gráfico:</label>
+                    <input type="text" id="chartNameInput" class="heuristic-select" placeholder="Ej: A* Manhattan">
+                </div>
+                <div class="control-group">
+                    <label for="benchmarkAlgorithmSelect">Algoritmo:</label>
+                    <select id="benchmarkAlgorithmSelect" class="heuristic-select">
+                        <option value="astar">A*</option>
+                        <option value="dijkstra">Dijkstra</option>
+                        <option value="bfs">Best-First Search</option>
+                    </select>
+                </div>
+                <div class="control-group" id="benchmarkHeuristicGroup">
+                    <label for="benchmarkHeuristicSelect">Heurística:</label>
+                    <select id="benchmarkHeuristicSelect" class="heuristic-select">
+                        <option value="euclidean">Euclidiana (Octil)</option>
+                        <option value="manhattan">Manhattan</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="gridSizeFromInput">Tamaño desde:</label>
+                    <input type="number" id="gridSizeFromInput" class="heuristic-select" min="5" max="100" value="10" placeholder="Desde">
+                </div>
+                <div class="control-group">
+                    <label for="gridSizeToInput">Tamaño hasta:</label>
+                    <input type="number" id="gridSizeToInput" class="heuristic-select" min="5" max="100" value="30" placeholder="Hasta">
+                </div>
+                <div class="control-group">
+                    <label for="chartColorInput">Color de la línea:</label>
+                    <input type="color" id="chartColorInput" value="#667eea" style="width: 100%; height: 40px; border-radius: 5px; border: 2px solid #3a3a4e; cursor: pointer;">
+                </div>
+                <button id="benchmarkBtn" class="benchmark-button">Generar Benchmark</button>
+            </div>
+        </div>
+        
+        <div class="chart-container" id="chartContainer">
+            <h3>Análisis de Rendimiento</h3>
+            <div id="performanceChart" style="width: 100%; height: 100%; flex: 1; min-height: 400px;"></div>
+        </div>
+    </div>
+    
+    <!-- Contenedor para las visualizaciones del benchmark -->
+    <div id="benchmarkVisualizationsSection" style="max-width: 1600px; width: 100%; margin: 0 auto; padding: 0 20px;"></div>
+    
+    <script src="Algoritmos/AStar2.js?v=9"></script>
+    <script src="Algoritmos/Dijkstra.js?v=8"></script>
+    <script src="Algoritmos/BFS.js?v=8"></script>
+    <script src="Boid.js?v=22"></script>
+    <script src="FlockingManager.js?v=8"></script>
+    <script src="benchmark.js?v=32"></script>
+    <script src="pathfinding2.js?v=38"></script>
+    
+    <!-- Script para actualizar valores de sliders -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Configurar sliders para actualizar valores mostrados
+            const fSeparacionSlider = document.getElementById('fSeparacionInput');
+            const fAlineacionSlider = document.getElementById('fAlineacionInput');
+            const fCohesionSlider = document.getElementById('fCohesionInput');
+            
+            const fSeparacionValue = document.getElementById('fSeparacionValue');
+            const fAlineacionValue = document.getElementById('fAlineacionValue');
+            const fCohesionValue = document.getElementById('fCohesionValue');
+            
+            // Actualizar separación
+            if (fSeparacionSlider && fSeparacionValue) {
+                fSeparacionValue.textContent = fSeparacionSlider.value;
+                fSeparacionSlider.addEventListener('input', function() {
+                    fSeparacionValue.textContent = parseFloat(this.value).toFixed(1);
+                });
+            }
+            
+            // Actualizar alineación
+            if (fAlineacionSlider && fAlineacionValue) {
+                fAlineacionValue.textContent = fAlineacionSlider.value;
+                fAlineacionSlider.addEventListener('input', function() {
+                    fAlineacionValue.textContent = parseFloat(this.value).toFixed(1);
+                });
+            }
+            
+            // Actualizar cohesión
+            if (fCohesionSlider && fCohesionValue) {
+                fCohesionValue.textContent = fCohesionSlider.value;
+                fCohesionSlider.addEventListener('input', function() {
+                    fCohesionValue.textContent = parseFloat(this.value).toFixed(1);
+                    // Actualizar parámetros en tiempo real si la simulación está corriendo
+                    if (typeof flockingManager !== 'undefined' && flockingManager.isRunning) {
+                        const newFSeparacion = parseFloat(document.getElementById('fSeparacionInput').value) || 1.0;
+                        const newFAlineacion = parseFloat(document.getElementById('fAlineacionInput').value) || 1.0;
+                        const newFCohesion = parseFloat(document.getElementById('fCohesionInput').value) || 1.0;
+                        
+                        flockingManager.fSeparacion = newFSeparacion;
+                        flockingManager.fAlineacion = newFAlineacion;
+                        flockingManager.fCohesion = newFCohesion;
+                        
+                        console.log('Parámetros actualizados en tiempo real:', newFSeparacion, newFAlineacion, newFCohesion);
+                    }
+                });
+            }
+            
+            // Actualizar separación - también actualizar en tiempo real
+            if (fSeparacionSlider && fSeparacionValue) {
+                fSeparacionSlider.addEventListener('input', function() {
+                    if (typeof flockingManager !== 'undefined' && flockingManager.isRunning) {
+                        const newFSeparacion = parseFloat(document.getElementById('fSeparacionInput').value) || 1.0;
+                        const newFAlineacion = parseFloat(document.getElementById('fAlineacionInput').value) || 1.0;
+                        const newFCohesion = parseFloat(document.getElementById('fCohesionInput').value) || 1.0;
+                        
+                        flockingManager.fSeparacion = newFSeparacion;
+                        flockingManager.fAlineacion = newFAlineacion;
+                        flockingManager.fCohesion = newFCohesion;
+                    }
+                });
+            }
+            
+            // Actualizar alineación - también actualizar en tiempo real
+            if (fAlineacionSlider && fAlineacionValue) {
+                fAlineacionSlider.addEventListener('input', function() {
+                    if (typeof flockingManager !== 'undefined' && flockingManager.isRunning) {
+                        const newFSeparacion = parseFloat(document.getElementById('fSeparacionInput').value) || 1.0;
+                        const newFAlineacion = parseFloat(document.getElementById('fAlineacionInput').value) || 1.0;
+                        const newFCohesion = parseFloat(document.getElementById('fCohesionInput').value) || 1.0;
+                        
+                        flockingManager.fSeparacion = newFSeparacion;
+                        flockingManager.fAlineacion = newFAlineacion;
+                        flockingManager.fCohesion = newFCohesion;
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
