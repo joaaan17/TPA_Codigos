@@ -24,7 +24,7 @@ class MountainCarEnvironment {
         this.done = false;
         
         // Límites del episodio
-        this.maxSteps = 200;
+        this.maxSteps = 400;
         
         // Canvas y renderizado
         this.canvas = document.getElementById('mountainCanvas');
@@ -107,13 +107,22 @@ class MountainCarEnvironment {
         // Incrementar pasos
         this.steps++;
         
-        // Calcular recompensa
-        let reward = -1;
+        // Sistema de recompensas mejorado pero más simple
+        let reward = -1; // Penalización base por tiempo
+        
+        // REWARD SHAPING: Bonus por estar más cerca de la meta
+        // Solo basado en posición, NO en velocidad (que causaba problemas)
+        const distanceToGoal = this.goalPosition - this.position;
+        const maxDistance = this.goalPosition - this.minPosition;
+        
+        // Pequeño bonus proporcional a qué tan cerca está (0 a 0.5)
+        const progressBonus = (1 - distanceToGoal / maxDistance) * 0.5;
+        reward += progressBonus;
         
         // Verificar si llegó a la meta
         if (this.position >= this.goalPosition) {
             this.done = true;
-            reward = 0; // Recompensa de -1 + llegada a meta (penalización por paso pero éxito)
+            reward += 100; // Gran recompensa por éxito
         }
         
         // Verificar si se acabó el tiempo

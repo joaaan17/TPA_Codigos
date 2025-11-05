@@ -52,29 +52,29 @@
                             <option value="sarsa">SARSA</option>
                         </select>
                     </div>
-                    <div class="control-group">
-                        <label for="alpha">Alpha (α):</label>
-                        <input type="number" id="alpha" value="0.1" min="0" max="1" step="0.01">
-                    </div>
-                    <div class="control-group">
-                        <label for="gamma">Gamma (γ):</label>
-                        <input type="number" id="gamma" value="0.99" min="0" max="1" step="0.01">
-                    </div>
-                    <div class="control-group">
-                        <label for="epsilon">Epsilon (ε):</label>
-                        <input type="number" id="epsilon" value="1.0" min="0" max="1" step="0.01">
-                    </div>
-                    <div class="control-group">
-                        <label for="epsilonDecay">Decay ε:</label>
-                        <input type="number" id="epsilonDecay" value="0.995" min="0.9" max="1" step="0.001">
-                    </div>
-                    <div class="control-group">
-                        <label for="epsilonMin">Min ε:</label>
-                        <input type="number" id="epsilonMin" value="0.01" min="0" max="0.1" step="0.01">
-                    </div>
+                        <div class="control-group">
+                            <label for="alpha">Alpha (α):</label>
+                            <input type="number" id="alpha" value="0.5" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="gamma">Gamma (γ):</label>
+                            <input type="number" id="gamma" value="0.999" min="0" max="1" step="0.001">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilon">Epsilon (ε):</label>
+                            <input type="number" id="epsilon" value="1.0" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilonDecay">Decay ε:</label>
+                            <input type="number" id="epsilonDecay" value="0.999" min="0.9" max="1" step="0.001">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilonMin">Min ε:</label>
+                            <input type="number" id="epsilonMin" value="0.01" min="0" max="0.1" step="0.01">
+                        </div>
                     <div class="control-group">
                         <label for="episodes">Episodios:</label>
-                        <input type="number" id="episodes" value="500" min="100" max="5000" step="100">
+                        <input type="number" id="episodes" value="1000" min="100" max="5000" step="100">
                     </div>
                     <div class="control-group">
                         <label for="speed">Velocidad Viz.:</label>
@@ -153,7 +153,7 @@
                 <div class="description-card">
                     <h4>Recompensas</h4>
                     <p>Cada paso: <strong>-1</strong><br>
-                       El episodio termina al alcanzar la meta o tras <strong>200 pasos</strong>.</p>
+                       El episodio termina al alcanzar la meta o tras <strong>400 pasos</strong>.</p>
                 </div>
                 <div class="description-card">
                     <h4>Concepto Clave</h4>

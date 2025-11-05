@@ -19,19 +19,20 @@ class RLAgent {
         // Acciones posibles
         this.actions = [0, 1, 2]; // Izquierda, Neutral, Derecha
         
-        // Parámetros de discretización
-        this.positionBins = 20;
-        this.velocityBins = 20;
+        // Parámetros de discretización (optimizados)
+        this.positionBins = 40;
+        this.velocityBins = 40;
     }
     
     // Obtener valores Q para un estado
     getQValues(state) {
         if (!this.qTable.has(state)) {
-            // Inicializar con valores aleatorios pequeños
+            // Inicialización OPTIMISTA - ayuda con exploración
+            // Valores positivos iniciales motivan la exploración
             this.qTable.set(state, [
-                Math.random() * 0.01,
-                Math.random() * 0.01,
-                Math.random() * 0.01
+                Math.random() * 2.0,
+                Math.random() * 2.0,
+                Math.random() * 2.0
             ]);
         }
         return this.qTable.get(state);
@@ -153,7 +154,7 @@ class RLAgent {
 }
 
 // Función de utilidad para discretizar estado desde el entorno
-function discretizeEnvironmentState(env, positionBins = 20, velocityBins = 20) {
+function discretizeEnvironmentState(env, positionBins = 40, velocityBins = 40) {
     const position = env.position;
     const velocity = env.velocity;
     

@@ -148,22 +148,29 @@ function drawChart() {
     }
     
     // Dibujar promedio móvil de distancia (últimos 100)
-    if (data.length > 10) {
-        const windowSize = Math.min(100, data.length);
+    if (data.length > 1) {
+        const maxWindowSize = 100;
         ctx.strokeStyle = '#ff6b6b';
         ctx.lineWidth = 3;
         ctx.beginPath();
         
-        for (let i = windowSize - 1; i < data.length; i++) {
-            const window = data.slice(i - windowSize + 1, i + 1);
+        let isFirstPoint = true;
+        
+        // Dibujar desde el principio, ajustando el tamaño de ventana
+        for (let i = 0; i < data.length; i++) {
+            // Usar ventana dinámica: crece hasta maxWindowSize
+            const windowSize = Math.min(maxWindowSize, i + 1);
+            const startIdx = Math.max(0, i - windowSize + 1);
+            const window = data.slice(startIdx, i + 1);
             const avg = window.reduce((a, b) => a + b, 0) / window.length;
             
             const x = margin.left + (i / (data.length - 1)) * plotWidth;
             // Invertir: menos distancia = arriba
             const y = margin.top + ((avg - minDistance) / range) * plotHeight;
             
-            if (i === windowSize - 1) {
+            if (isFirstPoint) {
                 ctx.moveTo(x, y);
+                isFirstPoint = false;
             } else {
                 ctx.lineTo(x, y);
             }
