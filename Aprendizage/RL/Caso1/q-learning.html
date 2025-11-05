@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q-Learning - RL</title>
+    <link rel="stylesheet" href="styles/common.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="index.html" class="back-btn">← Volver</a>
+            <h1>🎓 Q-Learning</h1>
+            <p class="subtitle">Off-policy Temporal Difference Learning</p>
+        </div>
+        
+        <div class="main-content">
+            <!-- Panel Izquierdo -->
+            <div>
+                <div class="controls-panel">
+                    <h2>⚙️ Configuración</h2>
+                    <div class="config-grid">
+                        <div class="control-group">
+                            <label for="width">Ancho:</label>
+                            <input type="number" id="width" value="10" min="5" max="20">
+                        </div>
+                        <div class="control-group">
+                            <label for="height">Alto:</label>
+                            <input type="number" id="height" value="10" min="5" max="20">
+                        </div>
+                        <div class="control-group">
+                            <label for="obstacles">Obstáculos (%):</label>
+                            <input type="number" id="obstacles" value="10" min="0" max="40" step="5">
+                        </div>
+                        <div class="control-group">
+                            <label for="alpha">Alpha (α):</label>
+                            <input type="number" id="alpha" value="0.1" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="gamma">Gamma (γ):</label>
+                            <input type="number" id="gamma" value="0.9" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilon">Epsilon (ε):</label>
+                            <input type="number" id="epsilon" value="0.1" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="episodes">Episodios:</label>
+                            <input type="number" id="episodes" value="1000" min="100" max="10000" step="100">
+                        </div>
+                        <div class="control-group">
+                            <label>
+                                <input type="checkbox" id="visualize"> Visualizar
+                            </label>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="createEnvironment()">🔄 Nuevo Entorno</button>
+                        <button class="btn btn-success" id="trainBtn" onclick="startTraining()">🎓 Entrenar</button>
+                        <button class="btn btn-warning" id="stopBtn" onclick="stopTraining()" disabled>⏹ Detener</button>
+                        <button class="btn btn-info" id="testBtn" onclick="testAgent()" disabled>🧪 Probar</button>
+                    </div>
+                </div>
+
+                <div class="canvas-panel">
+                    <h2>👁️ Visualización</h2>
+                    <div class="canvas-container">
+                        <canvas id="canvas"></canvas>
+                    </div>
+                    <div class="info-cards">
+                        <div class="info-card">
+                            <div class="info-label">Posición</div>
+                            <div class="info-value" id="position">(0, 0)</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Pasos</div>
+                            <div class="info-value" id="steps">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Derecho -->
+            <div>
+                <div class="info-panel">
+                    <h2>📊 Estado</h2>
+                    <div class="status-container">
+                        <span class="status-badge status-stopped" id="statusBadge">Listo</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressBar" style="width: 0%;">0%</div>
+                    </div>
+                    <div class="info-cards">
+                        <div class="info-card">
+                            <div class="info-label">Episodio</div>
+                            <div class="info-value" id="episode">0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Recompensa</div>
+                            <div class="info-value" id="reward">0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Promedio</div>
+                            <div class="info-value" id="avgReward">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-panel">
+                    <h2>📈 Gráfico</h2>
+                    <div class="chart-container">
+                        <canvas id="rewardChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="info-panel">
+                    <h2>📝 Log</h2>
+                    <div class="log-container" id="logContainer">
+                        <div class="log-line">>> Sistema listo. Crea un entorno para comenzar.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-description" style="margin-top: 20px; background: #f8f9fa; padding: 20px; border-radius: 12px;">
+            <h3>📚 Acerca de Q-Learning</h3>
+            <p>
+                <strong>Q-Learning</strong> es un algoritmo off-policy de Temporal Difference (TD) Learning. 
+                Aprende el valor óptimo de las acciones independientemente de la política seguida durante el entrenamiento.
+            </p>
+            <p>
+                <strong>Actualización Q:</strong> 
+                <code>Q(s,a) ← Q(s,a) + α[r + γ max Q(s',a') - Q(s,a)]</code>
+            </p>
+            <p>
+                La diferencia clave con SARSA es que Q-Learning usa el <strong>máximo Q del siguiente estado</strong> 
+                (off-policy), mientras que SARSA usa la acción que realmente tomará (on-policy).
+            </p>
+        </div>
+    </div>
+
+    <script src="core/env_2D.js"></script>
+    <script src="core/agentesRL.js"></script>
+    <script src="scripts/training-common.js"></script>
+    <script>
+        // Configurar para Q-Learning
+        ALGORITHM = 'qlearning';
+    </script>
+</body>
+</html>
+

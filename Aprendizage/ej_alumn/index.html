@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ejemplo Alumno - Movimientos Aleatorios</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        input[type="number"], input[type="range"] {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="number"] {
+            width: 100px;
+        }
+
+        input[type="range"] {
+            width: 150px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1em;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        canvas {
+            border: 3px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .info-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #333;
+        }
+
+        .legend-agent { background: #2196F3; }
+        .legend-goal { background: #f44336; }
+        .legend-obstacle { background: #000; }
+        .legend-empty { background: #fff; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .status-running {
+            background: #4caf50;
+            color: white;
+        }
+
+        .status-paused {
+            background: #ff9800;
+            color: white;
+        }
+
+        .status-completed {
+            background: #2196f3;
+            color: white;
+        }
+
+        .status-stopped {
+            background: #9e9e9e;
+            color: white;
+        }
+
+        .speed-display {
+            text-align: center;
+            color: #555;
+            margin-top: 5px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Ejemplo Alumno</h1>
+        <p class="subtitle">Agente con movimientos aleatorios en Environment2D</p>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="width">Ancho:</label>
+                <input type="number" id="width" value="15" min="5" max="30">
+            </div>
+            <div class="control-group">
+                <label for="height">Alto:</label>
+                <input type="number" id="height" value="15" min="5" max="30">
+            </div>
+            <div class="control-group">
+                <label for="obstacles">Obstáculos (%):</label>
+                <input type="number" id="obstacles" value="0" min="0" max="50" step="5">
+            </div>
+            <div class="control-group">
+                <label for="speed">Velocidad (ms):</label>
+                <input type="range" id="speed" min="50" max="1000" value="200" step="50">
+                <div class="speed-display"><span id="speedValue">200</span> ms</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" onclick="createNewEnvironment()">Crear Nuevo Entorno</button>
+            <button class="btn-success" id="startBtn" onclick="startSimulation()">▶ Iniciar</button>
+            <button class="btn-warning" id="pauseBtn" onclick="pauseSimulation()" disabled>⏸ Pausar</button>
+            <button class="btn-info" onclick="stepSimulation()">⏭ Paso a Paso</button>
+            <button class="btn-primary" onclick="resetSimulation()">🔄 Reiniciar</button>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color legend-agent"></div>
+                <span>Agente</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-goal"></div>
+                <span>Objetivo</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-obstacle"></div>
+                <span>Obstáculo</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-empty"></div>
+                <span>Vacío</span>
+            </div>
+        </div>
+
+        <div class="info">
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Estado Actual</div>
+                    <div class="info-value" id="state">(0, 0)</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Objetivo</div>
+                    <div class="info-value" id="goal">(14, 14)</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Pasos</div>
+                    <div class="info-value" id="steps">0</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Recompensa Total</div>
+                    <div class="info-value" id="reward">0</div>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 15px;">
+                <strong>Estado: </strong>
+                <span class="status-badge status-stopped" id="statusBadge">Detenido</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="env_2D.js"></script>
+    <script src="ej_alumn.js"></script>
+</body>
+</html>
+

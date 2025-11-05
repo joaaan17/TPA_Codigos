@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agente Aleatorio - RL</title>
+    <link rel="stylesheet" href="styles/common.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="index.html" class="back-btn">← Volver</a>
+            <h1>🎲 Agente Aleatorio</h1>
+            <p class="subtitle">Movimientos completamente aleatorios en Environment2D</p>
+        </div>
+        
+        <div class="controls-panel">
+            <h2>⚙️ Configuración del Entorno</h2>
+            <div class="config-grid">
+                <div class="control-group">
+                    <label for="width">Ancho:</label>
+                    <input type="number" id="width" value="15" min="5" max="25">
+                </div>
+                <div class="control-group">
+                    <label for="height">Alto:</label>
+                    <input type="number" id="height" value="15" min="5" max="25">
+                </div>
+                <div class="control-group">
+                    <label for="obstacles">Obstáculos (%):</label>
+                    <input type="number" id="obstacles" value="10" min="0" max="40" step="5">
+                </div>
+                <div class="control-group">
+                    <label for="speed">Velocidad (ms):</label>
+                    <input type="range" id="speed" min="50" max="1000" value="200" step="50">
+                    <div class="speed-display"><span id="speedValue">200</span> ms</div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="createEnvironment()">🔄 Nuevo Entorno</button>
+                <button class="btn btn-success" id="startBtn" onclick="startSimulation()">▶ Iniciar</button>
+                <button class="btn btn-warning" id="pauseBtn" onclick="pauseSimulation()" disabled>⏸ Pausar</button>
+                <button class="btn btn-info" onclick="stepSimulation()">⏭ Paso</button>
+                <button class="btn btn-primary" onclick="resetSimulation()">🔄 Reiniciar</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="canvas-panel">
+                <h2>👁️ Visualización</h2>
+                <div class="canvas-container">
+                    <canvas id="canvas"></canvas>
+                </div>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #2196F3;"></div>
+                        <span>Agente</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #f44336;"></div>
+                        <span>Objetivo</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #000;"></div>
+                        <span>Obstáculo</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <h2>📊 Información</h2>
+                <div class="info-cards">
+                    <div class="info-card">
+                        <div class="info-label">Estado</div>
+                        <div class="info-value" id="state">(0, 0)</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Objetivo</div>
+                        <div class="info-value" id="goal">(14, 14)</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Pasos</div>
+                        <div class="info-value" id="steps">0</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Recompensa</div>
+                        <div class="info-value" id="reward">0</div>
+                    </div>
+                </div>
+                <div class="status-container">
+                    <strong>Estado: </strong>
+                    <span class="status-badge status-stopped" id="statusBadge">Detenido</span>
+                </div>
+                
+                <div class="info-description">
+                    <h3>📝 Acerca de este Agente</h3>
+                    <p>
+                        Este agente realiza <strong>movimientos completamente aleatorios</strong>, 
+                        sin ningún tipo de aprendizaje o estrategia. En cada paso, elige una 
+                        acción al azar de las 4 posibles (↑ ↓ ← →).
+                    </p>
+                    <p>
+                        Esto es equivalente al código Python:
+                        <code>action = random.choice(env.get_valid_actions())</code>
+                    </p>
+                    <p>
+                        Observa cómo el agente puede tardar muchos pasos en llegar al objetivo, 
+                        o incluso quedarse atascado visitando las mismas posiciones repetidamente.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="shortcuts-info">
+            <strong>⌨️ Atajos:</strong>
+            <span>Espacio: Iniciar/Pausar</span>
+            <span>R: Reiniciar</span>
+            <span>N: Nuevo entorno</span>
+            <span>S: Paso a paso</span>
+        </div>
+    </div>
+
+    <script src="core/env_2D.js"></script>
+    <script src="scripts/random-agent.js"></script>
+</body>
+</html>
+

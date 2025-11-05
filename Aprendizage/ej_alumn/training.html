@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrenamiento de Agentes RL</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .panel h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        input[type="number"] {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        select {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1em;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            border-radius: 4px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            height: 300px;
+            position: relative;
+        }
+
+        .info-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .info-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-label {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .log-container {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .log-line {
+            margin: 2px 0;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }
+
+        .status-ready { background: #9e9e9e; color: white; }
+        .status-training { background: #ff9800; color: white; }
+        .status-trained { background: #4caf50; color: white; }
+        .status-testing { background: #2196f3; color: white; }
+
+        #rewardChart {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Entrenamiento de Agentes RL</h1>
+        <p class="subtitle">Q-Learning y SARSA en Environment2D</p>
+
+        <div class="main-grid">
+            <!-- Panel Izquierdo: Configuración y Controles -->
+            <div>
+                <!-- Configuración del Entorno -->
+                <div class="panel">
+                    <h2>⚙️ Configuración del Entorno</h2>
+                    <div class="config-grid">
+                        <div class="control-group">
+                            <label for="envWidth">Ancho:</label>
+                            <input type="number" id="envWidth" value="10" min="5" max="20">
+                        </div>
+                        <div class="control-group">
+                            <label for="envHeight">Alto:</label>
+                            <input type="number" id="envHeight" value="10" min="5" max="20">
+                        </div>
+                        <div class="control-group">
+                            <label for="envObstacles">Obstáculos (%):</label>
+                            <input type="number" id="envObstacles" value="10" min="0" max="40" step="5">
+                        </div>
+                    </div>
+                    <button class="btn-primary" onclick="createEnvironment()">Crear Entorno</button>
+                </div>
+
+                <!-- Configuración del Agente -->
+                <div class="panel" style="margin-top: 20px;">
+                    <h2>🤖 Configuración del Agente</h2>
+                    <div class="config-grid">
+                        <div class="control-group">
+                            <label for="alpha">Alpha (α):</label>
+                            <input type="number" id="alpha" value="0.1" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="gamma">Gamma (γ):</label>
+                            <input type="number" id="gamma" value="0.9" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilon">Epsilon (ε):</label>
+                            <input type="number" id="epsilon" value="0.1" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="numEpisodes">Episodios:</label>
+                            <input type="number" id="numEpisodes" value="1000" min="100" max="10000" step="100">
+                        </div>
+                        <div class="control-group">
+                            <label for="algorithm">Algoritmo:</label>
+                            <select id="algorithm">
+                                <option value="qlearning">Q-Learning</option>
+                                <option value="sarsa">SARSA</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label for="renderTraining">
+                                <input type="checkbox" id="renderTraining"> Visualizar
+                            </label>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-success" id="trainBtn" onclick="startTraining()">🎓 Entrenar</button>
+                        <button class="btn-warning" id="stopBtn" onclick="stopTraining()" disabled>⏹ Detener</button>
+                    </div>
+                </div>
+
+                <!-- Testing -->
+                <div class="panel" style="margin-top: 20px;">
+                    <h2>🧪 Pruebas</h2>
+                    <div class="control-group">
+                        <label for="numTests">Número de Pruebas:</label>
+                        <input type="number" id="numTests" value="5" min="1" max="20">
+                    </div>
+                    <button class="btn-info" id="testBtn" onclick="testAgent()" disabled style="margin-top: 10px;">
+                        🚀 Probar Agente
+                    </button>
+                </div>
+
+                <!-- Status -->
+                <div class="panel" style="margin-top: 20px;">
+                    <h2>📊 Estado</h2>
+                    <div style="text-align: center;">
+                        <span class="status-badge status-ready" id="statusBadge">Listo</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressBar" style="width: 0%;">0%</div>
+                    </div>
+                    <div class="info-cards">
+                        <div class="info-card">
+                            <div class="info-label">Episodio</div>
+                            <div class="info-value" id="currentEpisode">0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Recompensa</div>
+                            <div class="info-value" id="lastReward">0</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Promedio</div>
+                            <div class="info-value" id="avgReward">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Derecho: Visualización -->
+            <div>
+                <!-- Canvas -->
+                <div class="panel">
+                    <h2>👁️ Visualización</h2>
+                    <div class="canvas-container">
+                        <canvas id="canvas"></canvas>
+                    </div>
+                    <div class="info-cards">
+                        <div class="info-card">
+                            <div class="info-label">Posición</div>
+                            <div class="info-value" id="agentPos">(0, 0)</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Pasos</div>
+                            <div class="info-value" id="steps">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Recompensas -->
+                <div class="panel" style="margin-top: 20px;">
+                    <h2>📈 Recompensas por Episodio</h2>
+                    <div class="chart-container">
+                        <canvas id="rewardChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Log -->
+                <div class="panel" style="margin-top: 20px;">
+                    <h2>📝 Log</h2>
+                    <div class="log-container" id="logContainer">
+                        <div class="log-line">>> Sistema listo. Crea un entorno para comenzar.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="env_2D.js"></script>
+    <script src="agentesRL.js"></script>
+    <script src="training.js"></script>
+</body>
+</html>
+

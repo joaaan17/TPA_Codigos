@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reinforcement Learning - Inicio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 50px;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 3em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 50px;
+            font-size: 1.3em;
+        }
+
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+        }
+
+        .card:hover::before {
+            transform: translateX(0);
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-icon {
+            font-size: 4em;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .card-description {
+            color: #555;
+            line-height: 1.6;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .card-features {
+            list-style: none;
+            padding: 0;
+        }
+
+        .card-features li {
+            padding: 8px 0;
+            color: #666;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .card-features li:last-child {
+            border-bottom: none;
+        }
+
+        .card-features li::before {
+            content: "✓ ";
+            color: #4caf50;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .card-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .card-primary .card-title,
+        .card-primary .card-description,
+        .card-primary .card-features li {
+            color: white;
+        }
+
+        .card-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .card-success .card-title,
+        .card-success .card-description,
+        .card-success .card-features li {
+            color: white;
+        }
+
+        .card-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .card-info .card-title,
+        .card-info .card-description,
+        .card-info .card-features li {
+            color: white;
+        }
+
+        .info-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .info-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .info-section p {
+            color: #555;
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
+        .tech-badge {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .algorithms-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .algorithm-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .algorithm-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .algorithm-card p {
+            color: #666;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Reinforcement Learning</h1>
+        <p class="subtitle">Visualización Interactiva de Algoritmos de Aprendizaje por Refuerzo</p>
+
+        <div class="cards-container">
+            <a href="random-agent.html" class="card card-info">
+                <div class="card-icon">🎲</div>
+                <div class="card-title">Agente Aleatorio</div>
+                <div class="card-description">
+                    Observa un agente moviéndose aleatoriamente en el entorno 2D
+                </div>
+                <ul class="card-features">
+                    <li>Movimientos completamente aleatorios</li>
+                    <li>Simulación en tiempo real</li>
+                    <li>Control de velocidad ajustable</li>
+                    <li>Modo paso a paso</li>
+                    <li>Ideal para entender el problema</li>
+                </ul>
+            </a>
+
+            <a href="q-learning.html" class="card card-primary">
+                <div class="card-icon">🎓</div>
+                <div class="card-title">Q-Learning</div>
+                <div class="card-description">
+                    Entrena un agente con el algoritmo Q-Learning
+                </div>
+                <ul class="card-features">
+                    <li>Off-policy TD control</li>
+                    <li>Parámetros configurables (α, γ, ε)</li>
+                    <li>Gráficos de aprendizaje</li>
+                    <li>Visualización de Q-table</li>
+                    <li>Testing del agente entrenado</li>
+                </ul>
+            </a>
+
+            <a href="sarsa.html" class="card card-success">
+                <div class="card-icon">📚</div>
+                <div class="card-title">SARSA</div>
+                <div class="card-description">
+                    Entrena un agente con el algoritmo SARSA
+                </div>
+                <ul class="card-features">
+                    <li>On-policy TD control</li>
+                    <li>Parámetros configurables (α, γ, ε)</li>
+                    <li>Comparación con Q-Learning</li>
+                    <li>Visualización de política</li>
+                    <li>Testing y análisis</li>
+                </ul>
+            </a>
+        </div>
+
+        <div class="info-section">
+            <h2>📚 Acerca del Proyecto</h2>
+            <p>
+                Este proyecto es una implementación web completa de algoritmos de <strong>Reinforcement Learning</strong> 
+                para visualizar y comprender el comportamiento de agentes inteligentes en entornos 2D.
+            </p>
+            <p>
+                Basado en los códigos originales en Python del curso TPA (<code>env_2D.py</code>, 
+                <code>agentesRL.py</code>, <code>ej_alumn.py</code>), esta versión permite experimentar 
+                con los algoritmos directamente en el navegador.
+            </p>
+            
+            <h2 style="margin-top: 30px;">🤖 Algoritmos Implementados</h2>
+            <div class="algorithms-grid">
+                <div class="algorithm-card">
+                    <h3>Q-Learning</h3>
+                    <p>
+                        Algoritmo off-policy que aprende el valor óptimo de las acciones 
+                        independientemente de la política seguida durante el entrenamiento.
+                        Actualiza Q usando el máximo Q del siguiente estado.
+                    </p>
+                </div>
+                <div class="algorithm-card">
+                    <h3>SARSA</h3>
+                    <p>
+                        Algoritmo on-policy que aprende el valor de las acciones basándose 
+                        en la política que realmente sigue. Actualiza Q usando la acción 
+                        que realmente tomará en el siguiente estado.
+                    </p>
+                </div>
+            </div>
+
+            <h2 style="margin-top: 30px;">🛠️ Tecnologías</h2>
+            <div class="tech-stack">
+                <span class="tech-badge">JavaScript ES6+</span>
+                <span class="tech-badge">HTML5 Canvas</span>
+                <span class="tech-badge">CSS3</span>
+                <span class="tech-badge">Q-Learning</span>
+                <span class="tech-badge">SARSA</span>
+                <span class="tech-badge">Temporal Difference Learning</span>
+            </div>
+
+            <h2 style="margin-top: 30px;">🎯 Flujo de Aprendizaje Recomendado</h2>
+            <ol style="margin-left: 20px; line-height: 2; color: #555;">
+                <li><strong>Agente Aleatorio:</strong> Observa cómo un agente sin aprendizaje explora el entorno</li>
+                <li><strong>Q-Learning:</strong> Entrena tu primer agente y observa cómo aprende la política óptima</li>
+                <li><strong>SARSA:</strong> Compara el comportamiento on-policy vs off-policy</li>
+                <li><strong>Experimenta:</strong> Prueba diferentes parámetros y configuraciones de entorno</li>
+            </ol>
+
+            <h2 style="margin-top: 30px;">💡 Características Principales</h2>
+            <ul style="margin-left: 20px; line-height: 2; color: #555;">
+                <li><strong>Entornos personalizables:</strong> Tamaño y obstáculos configurables</li>
+                <li><strong>Visualización en tiempo real:</strong> Observa el aprendizaje mientras ocurre</li>
+                <li><strong>Gráficos interactivos:</strong> Analiza las recompensas por episodio</li>
+                <li><strong>Políticas visuales:</strong> Ve qué acción prefiere el agente en cada estado</li>
+                <li><strong>Exportar/Importar:</strong> Guarda y carga Q-tables entrenadas</li>
+                <li><strong>Testing completo:</strong> Prueba múltiples episodios y obtén estadísticas</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>💡 <strong>Tip:</strong> Comienza con "Agente Aleatorio" para entender el problema, 
+            luego experimenta con Q-Learning y SARSA para ver la diferencia.</p>
+            <p style="margin-top: 15px;">📖 Desarrollado para el curso de TPA - Técnicas de Programación Avanzada</p>
+            <p style="margin-top: 10px; color: #999;">No requiere instalación - Solo abre en tu navegador</p>
+        </div>
+    </div>
+</body>
+</html>
+

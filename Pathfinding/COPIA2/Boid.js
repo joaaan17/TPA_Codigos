@@ -6,8 +6,8 @@ class Boid {
         this.velocity = { x: 0, y: 0 }; // Velocidad
         this.acceleration = { x: 0, y: 0 }; // Aceleración
         
-        this.maxSpeed = 2.0; // Velocidad máxima (reducida para movimiento más lento y suave)
-        this.maxForce = 0.08; // Fuerza máxima de steering (reducida para movimientos más suaves)
+        this.maxSpeed = 0.8; // Velocidad máxima (reducida para movimiento más lento y suave)
+        this.maxForce = 0.06; // Fuerza máxima de steering (reducida para movimientos más suaves)
         
         this.angle = 0; // Ángulo actual de orientación
         this.targetAngle = 0; // Ángulo objetivo

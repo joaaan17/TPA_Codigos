@@ -1,5 +1,38 @@
 // ========== MÓDULO DE BENCHMARK PARA PATHFINDING ==========
 
+// Función auxiliar para generar obstáculos aleatorios para un tamaño específico de cuadrícula
+function generateRandomObstaclesForSize(rows, cols, percentage, startPos, endPos) {
+    const totalCells = rows * cols;
+    const obstacleCount = Math.floor(totalCells * percentage);
+    
+    // Generar lista de todas las celdas disponibles
+    const availableCells = [];
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            // Evitar inicio y destino
+            if ((x === startPos.x && y === startPos.y) || 
+                (x === endPos.x && y === endPos.y)) {
+                continue;
+            }
+            availableCells.push(`${x},${y}`);
+        }
+    }
+    
+    // Mezclar aleatoriamente usando Fisher-Yates shuffle
+    for (let i = availableCells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availableCells[i], availableCells[j]] = [availableCells[j], availableCells[i]];
+    }
+    
+    // Tomar los primeros obstacleCount elementos
+    const obstacles = new Set();
+    for (let i = 0; i < obstacleCount && i < availableCells.length; i++) {
+        obstacles.add(availableCells[i]);
+    }
+    
+    return obstacles;
+}
+
 // Función para ejecutar un algoritmo en una cuadrícula específica
 function runSingleAlgorithmBenchmark(algorithmName, gridSize, start, end, obstacles, canvas, heuristic = 'euclidean') {
     const startTime = performance.now();
@@ -179,12 +212,16 @@ async function runBenchmark() {
         return;
     }
     
-    chartDiv.innerHTML = '<p style="color: white; text-align: center;">Ejecutando benchmark...</p>';
+    chartDiv.innerHTML = '<p style="color: #000000; text-align: center; font-family: Montserrat, sans-serif; font-size: 16px;">Ejecutando benchmark...</p>';
     
     // Obtener el escenario actual (obstáculos del usuario)
     const currentStartPos = startPos;
     const currentEndPos = endPos;
     const currentObstacles = obstacles;
+    
+    // Detectar el tipo de terreno seleccionado
+    const terrainSelect = document.getElementById('terrainSelect');
+    const terrainType = terrainSelect ? terrainSelect.value : 'empty';
     
     // Calcular el tamaño del canvas actual en celdas
     const currentCanvasWidth = Math.floor(canvas.width / CONFIG.CELL_SIZE);
@@ -200,7 +237,7 @@ async function runBenchmark() {
     for (const size of gridSizes) {
         console.log(`Probando con cuadrícula de ${size}x${size}...`);
         
-        // Escalar los obstáculos, inicio y fin proporcionalmente
+        // Escalar inicio y fin proporcionalmente
         const scaleX = size / currentCanvasWidth;
         const scaleY = size / currentCanvasHeight;
         
@@ -214,13 +251,27 @@ async function runBenchmark() {
             y: Math.floor(currentEndPos.y * scaleY)
         };
         
-        const scaledObstacles = new Set();
-        for (const obstacleKey of currentObstacles) {
-            const [x, y] = obstacleKey.split(',').map(Number);
-            const scaledX = Math.floor(x * scaleX);
-            const scaledY = Math.floor(y * scaleY);
-            if (scaledX < size && scaledY < size) {
-                scaledObstacles.add(`${scaledX},${scaledY}`);
+        // Generar obstáculos según el tipo de terreno
+        // IMPORTANTE: Para terrenos con porcentajes de obstáculos (30% o 50%),
+        // se generan obstáculos aleatorios frescos para cada tamaño de cuadrícula
+        // para mantener el porcentaje correcto de densidad de obstáculos.
+        let scaledObstacles = new Set();
+        
+        if (terrainType === 'random') {
+            // Generar 30% de obstáculos aleatorios para este tamaño específico
+            scaledObstacles = generateRandomObstaclesForSize(size, size, 0.3, scaledStart, scaledEnd);
+        } else if (terrainType === 'random50') {
+            // Generar 50% de obstáculos aleatorios para este tamaño específico
+            scaledObstacles = generateRandomObstaclesForSize(size, size, 0.5, scaledStart, scaledEnd);
+        } else {
+            // Para otros tipos (empty, maze), escalar obstáculos existentes
+            for (const obstacleKey of currentObstacles) {
+                const [x, y] = obstacleKey.split(',').map(Number);
+                const scaledX = Math.floor(x * scaleX);
+                const scaledY = Math.floor(y * scaleY);
+                if (scaledX < size && scaledY < size) {
+                    scaledObstacles.add(`${scaledX},${scaledY}`);
+                }
             }
         }
         
@@ -258,11 +309,11 @@ async function runBenchmark() {
     addSeriesToChart(chartName, selectedAlgorithm, results, chartColor);
     
     // Iniciar visualización de los tamaños representativos
-    await visualizeBenchmarkResults(selectedAlgorithm, selectedHeuristic, gridSizes, currentStartPos, currentEndPos, currentObstacles, currentCanvasWidth, currentCanvasHeight);
+    await visualizeBenchmarkResults(selectedAlgorithm, selectedHeuristic, gridSizes, currentStartPos, currentEndPos, currentObstacles, currentCanvasWidth, currentCanvasHeight, terrainType);
 }
 
 // Función para visualizar resultados del benchmark
-async function visualizeBenchmarkResults(algorithm, heuristic, gridSizes, currentStartPos, currentEndPos, currentObstacles, currentCanvasWidth, currentCanvasHeight) {
+async function visualizeBenchmarkResults(algorithm, heuristic, gridSizes, currentStartPos, currentEndPos, currentObstacles, currentCanvasWidth, currentCanvasHeight, terrainType) {
     // Seleccionar 3 tamaños representativos
     let sizesToVisualize = [];
     if (gridSizes.length <= 3) {
@@ -286,7 +337,7 @@ async function visualizeBenchmarkResults(algorithm, heuristic, gridSizes, curren
     for (let i = 0; i < sizesToVisualize.length; i++) {
         const size = sizesToVisualize[i];
         
-        // Escalar el escenario
+        // Escalar inicio y fin proporcionalmente
         const scaleX = size / currentCanvasWidth;
         const scaleY = size / currentCanvasHeight;
         
@@ -300,13 +351,24 @@ async function visualizeBenchmarkResults(algorithm, heuristic, gridSizes, curren
             y: Math.floor(currentEndPos.y * scaleY)
         };
         
-        const scaledObstacles = new Set();
-        for (const obstacleKey of currentObstacles) {
-            const [x, y] = obstacleKey.split(',').map(Number);
-            const scaledX = Math.floor(x * scaleX);
-            const scaledY = Math.floor(y * scaleY);
-            if (scaledX < size && scaledY < size) {
-                scaledObstacles.add(`${scaledX},${scaledY}`);
+        // Generar obstáculos según el tipo de terreno
+        let scaledObstacles = new Set();
+        
+        if (terrainType === 'random') {
+            // Generar 30% de obstáculos aleatorios para este tamaño específico
+            scaledObstacles = generateRandomObstaclesForSize(size, size, 0.3, scaledStart, scaledEnd);
+        } else if (terrainType === 'random50') {
+            // Generar 50% de obstáculos aleatorios para este tamaño específico
+            scaledObstacles = generateRandomObstaclesForSize(size, size, 0.5, scaledStart, scaledEnd);
+        } else {
+            // Para otros tipos (empty, maze), escalar obstáculos existentes
+            for (const obstacleKey of currentObstacles) {
+                const [x, y] = obstacleKey.split(',').map(Number);
+                const scaledX = Math.floor(x * scaleX);
+                const scaledY = Math.floor(y * scaleY);
+                if (scaledX < size && scaledY < size) {
+                    scaledObstacles.add(`${scaledX},${scaledY}`);
+                }
             }
         }
         
@@ -990,31 +1052,41 @@ function addSeriesToChart(seriesName, algorithmName, results, customColor = null
         const heuristicSelect = document.getElementById('heuristicSelect');
         const heuristic = heuristicSelect ? heuristicSelect.value : 'euclidean';
         displayName = `A* (${heuristic})`;
-        color = customColor || '#667eea';
+        color = customColor || '#2E4272'; // Azul oscuro para fondo claro
     } else if (algorithmName === 'dijkstra') {
         displayName = 'Dijkstra';
-        color = customColor || '#4CAF50';
+        color = customColor || '#1B7340'; // Verde oscuro para fondo claro
     } else if (algorithmName === 'bfs') {
         const heuristicSelect = document.getElementById('heuristicSelect');
         const heuristic = heuristicSelect ? heuristicSelect.value : 'euclidean';
         displayName = `BFS (${heuristic})`;
-        color = customColor || '#f093fb';
+        color = customColor || '#8B2B8B'; // Púrpura oscuro para fondo claro
     } else {
         displayName = 'Unknown';
-        color = customColor || '#888';
+        color = customColor || '#000000';
     }
     
     // Usar el nombre personalizado si se proporcionó
     const finalName = seriesName || displayName;
     
-    // Agregar nueva serie
+    // Agregar nueva serie con estilo para fondo claro
     allSeries.push({
         name: finalName,
         x: results.gridSizes,
         y: results.nodes,
         mode: 'lines+markers',
-        line: { color: color, width: 3 },
-        marker: { size: 8 }
+        line: { 
+            color: color, 
+            width: 2.5 
+        },
+        marker: { 
+            size: 7,
+            color: color,
+            line: {
+                color: '#000000',
+                width: 1
+            }
+        }
     });
     
     // Redibujar gráfica con todas las series
@@ -1034,35 +1106,66 @@ function drawBenchmarkChart() {
             text: 'Comparación de Algoritmos de Pathfinding',
             font: {
                 family: 'Montserrat, sans-serif',
-                size: 18,
-                color: '#ffffff'
+                size: 20,
+                color: '#000000',
+                weight: 'bold'
             }
         },
         xaxis: {
             title: {
                 text: 'Tamaño de Cuadrícula (celdas)',
-                font: { family: 'Montserrat, sans-serif', color: '#e0e0e0' }
+                font: { 
+                    family: 'Montserrat, sans-serif', 
+                    color: '#000000',
+                    size: 14
+                }
             },
-            tickfont: { color: '#e0e0e0' },
-            gridcolor: '#3a3a4e'
+            tickfont: { 
+                color: '#000000',
+                family: 'Montserrat, sans-serif',
+                size: 12
+            },
+            gridcolor: '#666666',
+            gridwidth: 1,
+            showline: true,
+            linecolor: '#000000',
+            linewidth: 1
         },
         yaxis: {
             title: {
                 text: 'Nodos Explorados',
-                font: { family: 'Montserrat, sans-serif', color: '#e0e0e0' }
+                font: { 
+                    family: 'Montserrat, sans-serif', 
+                    color: '#000000',
+                    size: 14
+                }
             },
-            tickfont: { color: '#e0e0e0' },
-            gridcolor: '#3a3a4e'
+            tickfont: { 
+                color: '#000000',
+                family: 'Montserrat, sans-serif',
+                size: 12
+            },
+            gridcolor: '#666666',
+            gridwidth: 1,
+            showline: true,
+            linecolor: '#000000',
+            linewidth: 1
         },
-        plot_bgcolor: '#2a2a3e',
-        paper_bgcolor: '#2a2a3e',
+        plot_bgcolor: '#f5f0e8',
+        paper_bgcolor: '#f5f0e8',
         font: {
             family: 'Montserrat, sans-serif',
-            color: '#e0e0e0'
+            color: '#000000'
         },
         legend: {
-            font: { color: '#e0e0e0' },
-            bgcolor: 'transparent'
+            font: { 
+                color: '#000000',
+                family: 'Montserrat, sans-serif',
+                size: 12
+            },
+            bgcolor: 'rgba(255, 255, 255, 0.7)',
+            bordercolor: '#666666',
+            borderwidth: 1
         },
         autosize: true
     };
@@ -1092,35 +1195,66 @@ function initializeEmptyChart() {
             text: 'Comparación de Algoritmos de Pathfinding',
             font: {
                 family: 'Montserrat, sans-serif',
-                size: 18,
-                color: '#ffffff'
+                size: 20,
+                color: '#000000',
+                weight: 'bold'
             }
         },
         xaxis: {
             title: {
                 text: 'Tamaño de Cuadrícula (celdas)',
-                font: { family: 'Montserrat, sans-serif', color: '#e0e0e0' }
+                font: { 
+                    family: 'Montserrat, sans-serif', 
+                    color: '#000000',
+                    size: 14
+                }
             },
-            tickfont: { color: '#e0e0e0' },
-            gridcolor: '#3a3a4e'
+            tickfont: { 
+                color: '#000000',
+                family: 'Montserrat, sans-serif',
+                size: 12
+            },
+            gridcolor: '#666666',
+            gridwidth: 1,
+            showline: true,
+            linecolor: '#000000',
+            linewidth: 1
         },
         yaxis: {
             title: {
                 text: 'Nodos Explorados',
-                font: { family: 'Montserrat, sans-serif', color: '#e0e0e0' }
+                font: { 
+                    family: 'Montserrat, sans-serif', 
+                    color: '#000000',
+                    size: 14
+                }
             },
-            tickfont: { color: '#e0e0e0' },
-            gridcolor: '#3a3a4e'
+            tickfont: { 
+                color: '#000000',
+                family: 'Montserrat, sans-serif',
+                size: 12
+            },
+            gridcolor: '#666666',
+            gridwidth: 1,
+            showline: true,
+            linecolor: '#000000',
+            linewidth: 1
         },
-        plot_bgcolor: '#2a2a3e',
-        paper_bgcolor: '#2a2a3e',
+        plot_bgcolor: '#f5f0e8',
+        paper_bgcolor: '#f5f0e8',
         font: {
             family: 'Montserrat, sans-serif',
-            color: '#e0e0e0'
+            color: '#000000'
         },
         legend: {
-            font: { color: '#e0e0e0' },
-            bgcolor: 'transparent'
+            font: { 
+                color: '#000000',
+                family: 'Montserrat, sans-serif',
+                size: 12
+            },
+            bgcolor: 'rgba(255, 255, 255, 0.7)',
+            bordercolor: '#666666',
+            borderwidth: 1
         }
     };
     

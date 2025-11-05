@@ -211,10 +211,10 @@ h1 {
 .chart-container {
     flex: 1;
     padding: 20px;
-    background-color: #2a2a3e;
+    background-color: #f5f0e8;
     border-radius: 12px;
-    border: 1px solid #3a3a4e;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    border: 2px solid #d0ccc4;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     display: flex;
     flex-direction: column;
     min-height: 500px;
@@ -228,10 +228,10 @@ h1 {
 
 .chart-container h3 {
     margin-top: 0;
-    color: #ffffff;
+    color: #000000;
     font-family: 'Montserrat', sans-serif;
-    font-weight: 600;
-    font-size: 1.1rem;
+    font-weight: 700;
+    font-size: 1.3rem;
 }
 
 .canvas-wrapper {

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entorno 2D - Reinforcement Learning</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        input[type="number"] {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            width: 100px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1em;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        canvas {
+            border: 3px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 80px);
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .action-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 15px;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .action-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        #up { grid-column: 2; }
+        #left { grid-column: 1; grid-row: 2; }
+        #down { grid-column: 2; grid-row: 2; }
+        #right { grid-column: 3; grid-row: 2; }
+
+        .info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .info p {
+            margin: 8px 0;
+            color: #555;
+            font-size: 1em;
+        }
+
+        .info strong {
+            color: #333;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #333;
+        }
+
+        .legend-agent { background: #2196F3; }
+        .legend-goal { background: #f44336; }
+        .legend-obstacle { background: #000; }
+        .legend-empty { background: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Entorno 2D - Reinforcement Learning</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="width">Ancho:</label>
+                <input type="number" id="width" value="10" min="3" max="30">
+            </div>
+            <div class="control-group">
+                <label for="height">Alto:</label>
+                <input type="number" id="height" value="10" min="3" max="30">
+            </div>
+            <div class="control-group">
+                <label for="obstacles">Obstáculos (%):</label>
+                <input type="number" id="obstacles" value="20" min="0" max="50" step="1">
+            </div>
+            <button class="btn-primary" onclick="createEnvironment()">Crear Entorno</button>
+            <button class="btn-success" onclick="resetEnvironment()">Reiniciar</button>
+            <button class="btn-info" onclick="randomMove()">Movimiento Aleatorio</button>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="action-buttons">
+            <button id="up" class="action-btn" onclick="moveAgent(0)">↑</button>
+            <button id="left" class="action-btn" onclick="moveAgent(2)">←</button>
+            <button id="down" class="action-btn" onclick="moveAgent(1)">↓</button>
+            <button id="right" class="action-btn" onclick="moveAgent(3)">→</button>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color legend-agent"></div>
+                <span>Agente</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-goal"></div>
+                <span>Objetivo</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-obstacle"></div>
+                <span>Obstáculo</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-empty"></div>
+                <span>Vacío</span>
+            </div>
+        </div>
+
+        <div class="info">
+            <p><strong>Estado actual:</strong> <span id="state">(0, 0)</span></p>
+            <p><strong>Objetivo:</strong> <span id="goal">(9, 9)</span></p>
+            <p><strong>Pasos:</strong> <span id="steps">0</span></p>
+            <p><strong>Recompensa total:</strong> <span id="reward">0</span></p>
+            <p><strong>Estado:</strong> <span id="status">En progreso</span></p>
+        </div>
+    </div>
+
+    <script src="env_2D.js"></script>
+</body>
+</html>
+
