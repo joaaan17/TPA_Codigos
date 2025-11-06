@@ -10,8 +10,8 @@ let vel_viento;
 // Propiedades tela (optimizadas para rendimiento)
 let ancho_tela = 2.0;  // 2 metros de ancho
 let alto_tela = 2.0;   // 2 metros de alto
-let n_ancho_tela = 10; // Reducido para mejor rendimiento (10x10 = 100 partículas)
-let n_alto_tela = 10;  // Reducido para mejor rendimiento
+let n_ancho_tela = 15; // Aumentamos ahora que arreglamos el rendering
+let n_alto_tela = 15;  // 15x15 = 225 partículas
 let densidad_tela = 0.1; // kg/m^2 Podría ser tela gruesa de algodón, 100g/m^2
 let sphere_size_tela;
 let stiffness = 0.98;  // Aumentado para tela más rígida
@@ -21,9 +21,6 @@ let stiffness = 0.98;  // Aumentado para tela más rígida
 // ============================================
 function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
-  
-  // Optimizaciones de rendimiento WEBGL
-  smooth(); // Activar anti-aliasing
   
   vel_viento = createVector(0, 0, 0);
   sphere_size_tela = ancho_tela / n_ancho_tela * 0.4;
@@ -36,7 +33,7 @@ function setup() {
                     stiffness,
                     sphere_size_tela);
                     
-  system.set_n_iters(3); // Reducido a 3 iteraciones para mejor rendimiento
+  system.set_n_iters(5); // Podemos permitirnos más iteraciones ahora
 }
 
 // Ajustar canvas cuando se redimensiona la ventana
@@ -69,18 +66,6 @@ function aplica_viento() {
 // ============================================
 function draw() {
   background(20, 20, 55);
-  lights();
-  
-  // Posicionar cámara inicial más cerca y con mejor ángulo
-  camera(
-    ancho_tela * scale_px * 1.5, // x - un poco a la derecha
-    -alto_tela * scale_px * 0.5, // y - un poco arriba
-    ancho_tela * scale_px * 2.0,  // z - hacia adelante (más cerca)
-    ancho_tela * scale_px * 0.5,  // mirando al centro x
-    -alto_tela * scale_px * 0.5,  // mirando al centro y
-    0,                             // mirando al centro z
-    0, 1, 0                        // vector "arriba"
-  );
   
   // Control de cámara orbital (usa el mouse para rotar)
   orbitControl();
@@ -113,14 +98,33 @@ function display() {
   let npart = system.particles.length;
   let nconst = system.constraints.length;
   
-  // Dibujar constraints (líneas) primero
+  // DIBUJAR SOLO LÍNEAS (sin superficie rellena)
+  noFill(); // CRÍTICO: Sin relleno para evitar superficie negra
+  stroke(200, 200, 255); // Líneas azul claro
+  strokeWeight(1);
+  beginShape(LINES);
   for (let i = 0; i < nconst; i++) {
-    system.constraints[i].display(scale_px);
+    let c = system.constraints[i];
+    let p1 = c.particles[0].location;
+    let p2 = c.particles[1].location;
+    vertex(scale_px * p1.x, -scale_px * p1.y, scale_px * p1.z);
+    vertex(scale_px * p2.x, -scale_px * p2.y, scale_px * p2.z);
   }
+  endShape();
   
-  // Dibujar partículas (esferas) - optimizado con WEBGL
+  // DIBUJAR PARTÍCULAS como esferas negras
+  fill(0); // Negro
+  noStroke();
+  let size = scale_px * sphere_size_tela;
+  
   for (let i = 0; i < npart; i++) {
-    system.particles[i].display(scale_px);
+    let p = system.particles[i];
+    push();
+    translate(scale_px * p.location.x,
+              -scale_px * p.location.y,
+              scale_px * p.location.z);
+    sphere(size, 6, 6); // Esferas negras con detalle moderado
+    pop();
   }
 }
 
@@ -135,23 +139,23 @@ function keyPressed() {
   
   // Viento - Eje Y (vertical)
   if (key === 'S' || key === 's') {
-    vel_viento.y += 0.001;
+    vel_viento.y += 0.1; // Incremento de 10 décimas
   } else if (key === 'X' || key === 'x') {
-    vel_viento.y -= 0.001;
+    vel_viento.y -= 0.1;
   }
   
   // Viento - Eje Z (profundidad)
   if (key === 'D' || key === 'd') {
-    vel_viento.z += 0.001;
+    vel_viento.z += 0.1; // Incremento de 10 décimas
   } else if (key === 'A' || key === 'a') {
-    vel_viento.z -= 0.001;
+    vel_viento.z -= 0.1;
   }
   
   // Viento - Eje X (horizontal)
   if (key === 'C' || key === 'c') {
-    vel_viento.x += 0.001;
+    vel_viento.x += 0.1; // Incremento de 10 décimas
   } else if (key === 'Z' || key === 'z') {
-    vel_viento.x -= 0.001;
+    vel_viento.x -= 0.1;
   }
 }
 

@@ -41,12 +41,9 @@ class DistanceConstraint extends Constraint {
     let part1 = this.particles[0]; 
     let part2 = this.particles[1];
     
-    // Calcular diferencia directamente sin crear vector temporal
-    let dx = part1.location.x - part2.location.x;
-    let dy = part1.location.y - part2.location.y;
-    let dz = part1.location.z - part2.location.z;
-    
-    let dist_actual = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    // Vector de diferencia entre partículas
+    let vd = p5.Vector.sub(part1.location, part2.location);
+    let dist_actual = vd.mag();
     
     // Si las partículas están en la misma posición, salir
     if (dist_actual < 0.0001) return;
@@ -54,39 +51,30 @@ class DistanceConstraint extends Constraint {
     // Calcular constraint: C = |p1 - p2| - d
     this.C = dist_actual - this.d;
     
-    // Normalizar y calcular corrección en uno
+    // Normalizar el vector de diferencia
+    let n = vd.normalize();
+    
+    // Calcular las correcciones usando el método PBD
+    // delta_p = -k' * C * n / (w1 + w2)
     let w_sum = part1.w + part2.w;
     if (w_sum < 0.0001) return; // Ambas partículas fijas
     
-    let factor = -this.k_coef * this.C / (w_sum * dist_actual);
+    let delta_lambda = -this.k_coef * this.C / w_sum;
     
-    // Aplicar correcciones directamente
+    // Aplicar correcciones
+    let correction = p5.Vector.mult(n, delta_lambda);
+    
     if (!part1.bloqueada) {
-      let w1_factor = factor * part1.w;
-      part1.location.x += dx * w1_factor;
-      part1.location.y += dy * w1_factor;
-      part1.location.z += dz * w1_factor;
+      part1.location.add(p5.Vector.mult(correction, part1.w));
     }
     if (!part2.bloqueada) {
-      let w2_factor = factor * part2.w;
-      part2.location.x -= dx * w2_factor;
-      part2.location.y -= dy * w2_factor;
-      part2.location.z -= dz * w2_factor;
+      part2.location.sub(p5.Vector.mult(correction, part2.w));
     }
   }
   
   display(scale_px) {
-    let p1 = this.particles[0].location; 
-    let p2 = this.particles[1].location; 
-    
-    // Color que cambia según la tensión/compresión
-    let tension = abs(4 * this.C / this.d);
-    let colorVal = 255 * (1 - tension);
-    
-    strokeWeight(2); // Reducido para mejor rendimiento
-    stroke(255, colorVal, colorVal);
-    line(scale_px * p1.x, -scale_px * p1.y, scale_px * p1.z, 
-         scale_px * p2.x, -scale_px * p2.y, scale_px * p2.z);
+    // YA NO SE USA - El rendering se hace con beginShape(LINES) en PBD.js
+    // Esto es mucho más rápido que llamar line() 180 veces
   }
 }
 

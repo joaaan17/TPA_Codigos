@@ -30,17 +30,11 @@ class PBDSystem {
   }
 
   apply_gravity(g) {
-    // Optimizado: aplicar gravedad sin crear vectores temporales
-    let gx = g.x;
-    let gy = g.y;
-    let gz = g.z;
-    
+    let p;
     for (let i = 0; i < this.particles.length; i++) {
-      let p = this.particles[i];
+      p = this.particles[i];
       if (p.w > 0) { // Si la masa es infinita, no se aplica
-        p.force.x += gx * p.masa;
-        p.force.y += gy * p.masa;
-        p.force.z += gz * p.masa;
+        p.force.add(p5.Vector.mult(g, p.masa));
       }
     }
   }
