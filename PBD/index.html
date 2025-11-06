@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación PBD - Tela</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            font-family: 'Courier New', monospace;
+        }
+        main {
+            margin: 0;
+            padding: 0;
+        }
+        canvas {
+            display: block;
+        }
+        #stats {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            line-height: 1.6;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border-radius: 5px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #stats .label {
+            color: #88ff88;
+            font-weight: bold;
+        }
+        #stats .value {
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <main></main>
+    
+    <!-- Panel de estadísticas -->
+    <div id="stats">
+        <div><span class="label">FPS:</span> <span id="fps" class="value">--</span> (WEBGL)</div>
+        <div><span class="label">Partículas:</span> <span id="particles" class="value">--</span></div>
+        <div><span class="label">Viento:</span> <span id="wind" class="value">(0.000, 0.000, 0.000)</span></div>
+        <div style="margin-top: 10px; color: #ffdd88;"><strong>CONTROLES:</strong></div>
+        <div>S/X - Viento Arriba/Abajo</div>
+        <div>C/Z - Viento Derecha/Izquierda</div>
+        <div>D/A - Viento Adelante/Atrás</div>
+        <div>Mouse - Rotar cámara</div>
+    </div>
+    
+    <!-- Scripts de la simulación PBD -->
+    <script src="Particle.js"></script>
+    <script src="Constraint.js"></script>
+    <script src="PBDSystem.js"></script>
+    <script src="Tela.js"></script>
+    <script src="PBD.js"></script>
+</body>
+</html>
+
