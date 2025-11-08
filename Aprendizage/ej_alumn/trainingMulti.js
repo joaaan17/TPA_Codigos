@@ -11,7 +11,7 @@ const logContainer = document.getElementById('logContainer');
 
 // Función para agregar log
 function addLog(message) {
-    if (!logContainer) return; // Si no existe el contenedor de log, no hacer nada
+    if (!logContainer) return;
     const logLine = document.createElement('div');
     logLine.className = 'log-line';
     logLine.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -35,21 +35,23 @@ function updateProgress(current, total) {
     progressBar.textContent = `${percentage}%`;
 }
 
-// Crear entorno
+// Crear entorno multi-goal
 function createEnvironment() {
     const width = parseInt(document.getElementById('envWidth').value);
     const height = parseInt(document.getElementById('envHeight').value);
     const obstacles = parseInt(document.getElementById('envObstacles').value) / 100;
+    const numGoals = parseInt(document.getElementById('numGoals').value);
 
-    env = new Environment2D(width, height, obstacles);
+    env = new Environment2DMultiGoal(width, height, obstacles, numGoals);
     env.reset();
     env.render(canvas);
 
-    addLog(`Entorno creado: ${width}x${height}, obstáculos: ${obstacles * 100}%`);
+    addLog(`Entorno Multi-Goal creado: ${width}x${height}, ${numGoals} metas, obstáculos: ${obstacles * 100}%`);
     updateStatusBadge('ready', 'Listo para entrenar');
     
     document.getElementById('agentPos').textContent = `(${env.state[0]}, ${env.state[1]})`;
     document.getElementById('steps').textContent = '0';
+    document.getElementById('goalsInfo').textContent = `${numGoals} metas`;
 }
 
 // Iniciar entrenamiento
@@ -83,10 +85,10 @@ async function startTraining() {
     const renderTrainingElement = document.getElementById('renderTraining');
     const renderTraining = renderTrainingElement ? renderTrainingElement.checked : false;
 
-    // Crear agente
-    agent = new Agent(env, alpha, gamma, epsilon, renderTraining, 10);
+    // Crear agente multi-goal
+    agent = new AgentMultiGoal(env, alpha, gamma, epsilon, renderTraining, 10);
     
-    addLog(`Agente creado con α=${alpha}, γ=${gamma}, ε=${epsilon}`);
+    addLog(`Agente Multi-Goal creado con α=${alpha}, γ=${gamma}, ε=${epsilon}`);
     addLog(`Iniciando entrenamiento con ${algorithm.toUpperCase()}...`);
     updateStatusBadge('training', 'Entrenando...');
 
@@ -96,7 +98,6 @@ async function startTraining() {
     // Callbacks
     const onProgress = (episode, total, reward) => {
         updateProgress(episode, total);
-        // Mostrar el número de episodio (ajustar si viene como índice 0-based)
         const displayEpisode = episode === total ? episode : episode + 1;
         document.getElementById('episodeValue').textContent = displayEpisode;
         document.getElementById('currentEpisode').textContent = displayEpisode;
@@ -107,16 +108,13 @@ async function startTraining() {
         document.getElementById('lastReward').textContent = reward.toFixed(0);
         document.getElementById('episodeRewardValue').textContent = reward.toFixed(0);
         
-        // Actualizar número de episodio (1-based para display)
         document.getElementById('episodeValue').textContent = episode + 1;
         document.getElementById('currentEpisode').textContent = episode + 1;
         
-        // Calcular promedio de últimos 100 episodios
         const recentRewards = allRewards.slice(-100);
         const avg = recentRewards.reduce((a, b) => a + b, 0) / recentRewards.length;
         document.getElementById('avgReward').textContent = avg.toFixed(1);
         
-        // Actualizar mejor recompensa
         const bestRewardElement = document.getElementById('bestReward');
         if (bestRewardElement) {
             const currentBestText = bestRewardElement.textContent;
@@ -126,7 +124,6 @@ async function startTraining() {
             }
         }
         
-        // Actualizar gráfico cada 10 episodios
         if (episode % 10 === 0 || episode === allRewards.length - 1) {
             updateChart(allRewards);
         }
@@ -137,14 +134,12 @@ async function startTraining() {
             document.getElementById('steps').textContent = env.steps;
         }
 
-        // Verificar si se debe detener
         if (shouldStop) {
             throw new Error('Training stopped by user');
         }
     };
 
     try {
-        // Entrenar según el algoritmo
         let rewards;
         if (algorithm === 'qlearning') {
             rewards = await agent.trainQLearning(numEpisodes, onProgress, onEpisodeComplete);
@@ -156,12 +151,13 @@ async function startTraining() {
         addLog(`Entrenamiento completado. ${numEpisodes} episodios.`);
         updateStatusBadge('trained', 'Entrenado ✓');
         
-        // Mostrar política aprendida
         agent.printPolicy();
         
-        // Mostrar estadísticas
         const stats = agent.getQTableStats();
         addLog(`Q-Table: Mean=${stats.mean.toFixed(3)}, Min=${stats.min.toFixed(2)}, Max=${stats.max.toFixed(2)}`);
+        
+        const goalStats = agent.getGoalStats();
+        addLog(`Metas alcanzadas: ${goalStats.counts.join(', ')} (${goalStats.distribution.join(', ')})`);
         
     } catch (error) {
         if (error.message === 'Training stopped by user') {
@@ -172,20 +168,17 @@ async function startTraining() {
         }
     }
 
-    // Habilitar controles
     document.getElementById('trainBtn').disabled = false;
     document.getElementById('testBtn').disabled = false;
     document.getElementById('stopBtn').disabled = true;
     isTraining = false;
 }
 
-// Detener entrenamiento
 function stopTraining() {
     shouldStop = true;
     addLog('Deteniendo entrenamiento...');
 }
 
-// Probar agente
 async function testAgent() {
     if (!agent) {
         alert('Primero entrena un agente');
@@ -206,18 +199,19 @@ async function testAgent() {
     };
 
     const onTestComplete = async (result) => {
-        addLog(`Test ${result.test}: ${result.steps} pasos, recompensa: ${result.totalReward}`);
+        const goalText = result.goalReached !== null ? ` - Meta ${result.goalReached + 1}` : ' - Sin meta';
+        addLog(`Test ${result.test}: ${result.steps} pasos, recompensa: ${result.totalReward}${goalText}`);
         await new Promise(resolve => setTimeout(resolve, 500));
     };
 
     try {
         const results = await agent.testAgent(numTests, onStateChange, onTestComplete);
         
-        // Calcular estadísticas
         const avgSteps = results.reduce((sum, r) => sum + r.steps, 0) / results.length;
         const avgReward = results.reduce((sum, r) => sum + r.totalReward, 0) / results.length;
+        const successRate = results.filter(r => r.success).length / results.length * 100;
         
-        addLog(`Pruebas completadas. Promedio: ${avgSteps.toFixed(1)} pasos, ${avgReward.toFixed(1)} recompensa`);
+        addLog(`Pruebas completadas. Promedio: ${avgSteps.toFixed(1)} pasos, ${avgReward.toFixed(1)} recompensa, ${successRate.toFixed(0)}% éxito`);
         updateStatusBadge('trained', 'Entrenado ✓');
         
     } catch (error) {
@@ -237,7 +231,6 @@ function initChart() {
         height: ctx.canvas.height
     };
     
-    // Configurar canvas
     ctx.canvas.width = ctx.canvas.offsetWidth;
     ctx.canvas.height = ctx.canvas.offsetHeight;
     rewardChart.width = ctx.canvas.width;
@@ -251,12 +244,10 @@ function updateChart(rewards) {
     const width = rewardChart.width;
     const height = rewardChart.height;
     
-    // Limpiar
     ctx.clearRect(0, 0, width, height);
     
     if (rewards.length === 0) return;
     
-    // Calcular promedios móviles (window=100)
     const windowSize = Math.min(100, Math.floor(rewards.length / 10));
     const smoothed = [];
     for (let i = 0; i < rewards.length; i++) {
@@ -266,17 +257,14 @@ function updateChart(rewards) {
         smoothed.push(avg);
     }
     
-    // Encontrar min y max
     const minReward = Math.min(...smoothed);
     const maxReward = Math.max(...smoothed);
     const range = maxReward - minReward || 1;
     
-    // Márgenes
     const margin = { top: 20, right: 20, bottom: 30, left: 50 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
     
-    // Dibujar ejes
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -285,14 +273,12 @@ function updateChart(rewards) {
     ctx.lineTo(width - margin.right, height - margin.bottom);
     ctx.stroke();
     
-    // Etiquetas de eje Y
     ctx.fillStyle = '#666';
     ctx.font = '12px Arial';
     ctx.textAlign = 'right';
     ctx.fillText(maxReward.toFixed(0), margin.left - 5, margin.top + 15);
     ctx.fillText(minReward.toFixed(0), margin.left - 5, height - margin.bottom);
     
-    // Dibujar línea
     ctx.strokeStyle = '#667eea';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -310,11 +296,10 @@ function updateChart(rewards) {
     
     ctx.stroke();
     
-    // Título
     ctx.fillStyle = '#333';
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`Recompensa Promedio (últimos ${windowSize} episodios)`, width / 2, 15);
+    ctx.fillText(`Recompensa Promedio Multi-Goal (últimos ${windowSize} episodios)`, width / 2, 15);
 }
 
 // Atajos de teclado

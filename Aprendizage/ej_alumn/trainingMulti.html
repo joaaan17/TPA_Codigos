@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entrenamiento de Agentes RL</title>
+    <title>Entrenamiento Multi-Goal RL</title>
     <style>
         * {
             margin: 0;
@@ -50,6 +50,17 @@
             font-size: 1.2em;
             opacity: 0.9;
             color: #b0b0c0;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 15px;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #000;
+            margin-left: 10px;
         }
 
         /* Panel de simulación grande */
@@ -346,7 +357,6 @@
             font-size: 0.9em;
         }
 
-
         .status-badge {
             display: inline-block;
             padding: 10px 25px;
@@ -482,13 +492,13 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Entrenamiento de Agentes RL</h1>
-            <p class="subtitle">Q-Learning y SARSA en Environment2D</p>
+            <h1>🎯 Entrenamiento Multi-Goal RL <span class="badge">MULTI-GOAL</span></h1>
+            <p class="subtitle">Q-Learning y SARSA con Múltiples Objetivos</p>
         </div>
 
         <!-- Panel de Visualización (Grande, arriba) -->
         <div class="canvas-panel-large">
-            <h2>Visualización del Entorno</h2>
+            <h2>👁️ Visualización del Entorno Multi-Goal</h2>
             <div class="canvas-container-large">
                 <canvas id="canvas"></canvas>
             </div>
@@ -509,6 +519,10 @@
                     <div class="info-label">Recompensa</div>
                     <div class="info-value" id="lastReward">0</div>
                 </div>
+                <div class="info-card">
+                    <div class="info-label">Metas Totales</div>
+                    <div class="info-value" id="goalsInfo">3 metas</div>
+                </div>
             </div>
         </div>
 
@@ -516,7 +530,7 @@
         <div class="main-content">
             <!-- Configuración de Entrenamiento -->
             <div class="controls-panel">
-                <h2>Configuración de Entrenamiento</h2>
+                <h2>⚙️ Configuración de Entrenamiento</h2>
                 <div class="config-grid">
                     <div class="control-group">
                         <label for="algorithm">Algoritmo:</label>
@@ -524,6 +538,10 @@
                             <option value="qlearning">Q-Learning</option>
                             <option value="sarsa">SARSA</option>
                         </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="numGoals">🎯 Número de Metas:</label>
+                        <input type="number" id="numGoals" value="3" min="2" max="8">
                     </div>
                     <div class="control-group">
                         <label for="alpha">Alpha (α):</label>
@@ -542,16 +560,16 @@
                         <input type="number" id="numEpisodes" value="1000" min="100" max="10000" step="100">
                     </div>
                     <div class="control-group">
-                        <label for="envObstacles">Obstáculos (%):</label>
-                        <input type="number" id="envObstacles" value="10" min="0" max="40" step="5">
-                    </div>
-                    <div class="control-group">
                         <label for="envWidth">Ancho Grid:</label>
                         <input type="number" id="envWidth" value="10" min="5" max="20">
                     </div>
                     <div class="control-group">
                         <label for="envHeight">Alto Grid:</label>
                         <input type="number" id="envHeight" value="10" min="5" max="20">
+                    </div>
+                    <div class="control-group">
+                        <label for="envObstacles">Obstáculos (%):</label>
+                        <input type="number" id="envObstacles" value="10" min="0" max="40" step="5">
                     </div>
                     <div class="control-group">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -570,7 +588,7 @@
 
             <!-- Estado del Entrenamiento -->
             <div class="info-panel">
-                <h2> Estado del Entrenamiento</h2>
+                <h2>📊 Estado del Entrenamiento</h2>
                 <div class="status-container">
                     <span class="status-badge status-stopped" id="statusBadge">Listo</span>
                 </div>
@@ -607,16 +625,15 @@
 
         <!-- Gráfico de Progreso (Grande, toda la fila) -->
         <div class="chart-panel-large">
-            <h2>Evolución del Agente (Recompensas por Episodio)</h2>
+            <h2>📈 Evolución del Agente Multi-Goal (Recompensas por Episodio)</h2>
             <div class="chart-container-large">
                 <canvas id="rewardChart"></canvas>
             </div>
         </div>
     </div>
 
-    <script src="env_2D.js"></script>
-    <script src="agentesRL.js"></script>
-    <script src="training.js"></script>
+    <script src="env_2DMulti.js"></script>
+    <script src="agentesRLMulti.js"></script>
+    <script src="trainingMulti.js"></script>
 </body>
 </html>
-

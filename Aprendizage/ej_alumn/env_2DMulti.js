@@ -1,26 +1,59 @@
-class Environment2D {
-    constructor(width, height, obstaclePercentage = 0) {
+class Environment2DMultiGoal {
+    constructor(width, height, obstaclePercentage = 0, numGoals = 3) {
         this.width = width;
         this.height = height;
         this.state = [0, 0]; // Estado inicial del agente (esquina superior izquierda)
-        this.goal = [width - 1, height - 1]; // Objetivo en la esquina inferior derecha
+        this.numGoals = numGoals;
+        this.goals = []; // Array de múltiples objetivos
         this.obstaclePercentage = obstaclePercentage;
-        this.grid = Array(height).fill(0).map(() => Array(width).fill(0)); // Crear una cuadrícula de 0s
+        this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
         this.steps = 0;
         this.totalReward = 0;
         this.done = false;
+        this.reachedGoal = null; // Índice de la meta alcanzada
+        this._generateGoals();
         this._generateObstacles();
+    }
+
+    _generateGoals() {
+        // Generar múltiples metas en posiciones aleatorias
+        this.goals = [];
+        const possiblePositions = [];
+        
+        // Crear lista de todas las posiciones excepto el inicio
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                if (!this._arraysEqual([y, x], this.state)) {
+                    possiblePositions.push([y, x]);
+                }
+            }
+        }
+        
+        // Seleccionar numGoals posiciones aleatorias
+        const goalCount = Math.min(this.numGoals, possiblePositions.length);
+        const selectedGoals = this._randomSample(possiblePositions, goalCount);
+        
+        for (const goal of selectedGoals) {
+            this.goals.push(goal);
+            // Marcar en el grid como meta (valor 2)
+            this.grid[goal[0]][goal[1]] = 2;
+        }
+        
+        console.log(`Metas generadas: ${this.goals.length}`, this.goals);
     }
 
     _generateObstacles() {
         const totalCells = this.width * this.height;
         const obstacleCount = Math.floor(totalCells * this.obstaclePercentage);
         
-        // Crear lista de posiciones posibles (evitar inicio y objetivo)
+        // Crear lista de posiciones posibles (evitar inicio y metas)
         const possiblePositions = [];
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
-                if (!this._arraysEqual([y, x], this.state) && !this._arraysEqual([y, x], this.goal)) {
+                const isStart = this._arraysEqual([y, x], this.state);
+                const isGoal = this.goals.some(goal => this._arraysEqual([y, x], goal));
+                
+                if (!isStart && !isGoal) {
                     possiblePositions.push([y, x]);
                 }
             }
@@ -55,6 +88,7 @@ class Environment2D {
         this.steps = 0;
         this.totalReward = 0;
         this.done = false;
+        this.reachedGoal = null;
         return this.state;
     }
 
@@ -63,7 +97,8 @@ class Environment2D {
             return {
                 state: this.state,
                 reward: 0,
-                done: true
+                done: true,
+                goalIndex: this.reachedGoal
             };
         }
 
@@ -90,13 +125,18 @@ class Environment2D {
         this.state = newState;
         this.steps++;
 
-        // Recompensa: +1 si llega al objetivo, -1 por cada paso
-        let reward;
-        if (this._arraysEqual(this.state, this.goal)) {
-            reward = 1;
-            this.done = true;
-        } else {
-            reward = -1;
+        // Recompensa: +10 si llega a cualquier objetivo, -1 por cada paso
+        let reward = -1;
+        
+        // Verificar si alcanzó alguna meta
+        for (let i = 0; i < this.goals.length; i++) {
+            if (this._arraysEqual(this.state, this.goals[i])) {
+                reward = 10; // Recompensa mayor para multi-goal
+                this.done = true;
+                this.reachedGoal = i;
+                console.log(`Meta ${i} alcanzada en posición (${this.state[0]}, ${this.state[1]})`);
+                break;
+            }
         }
 
         this.totalReward += reward;
@@ -104,7 +144,8 @@ class Environment2D {
         return {
             state: this.state,
             reward: reward,
-            done: this.done
+            done: this.done,
+            goalIndex: this.reachedGoal
         };
     }
 
@@ -159,17 +200,48 @@ class Environment2D {
             }
         }
 
-        // Dibujar objetivo
-        ctx.fillStyle = '#f44336';
-        ctx.beginPath();
-        ctx.arc(
-            this.goal[1] * cellSize + cellSize / 2,
-            this.goal[0] * cellSize + cellSize / 2,
-            cellSize / 3,
-            0,
-            Math.PI * 2
-        );
-        ctx.fill();
+        // Dibujar múltiples objetivos con colores diferentes
+        const goalColors = ['#FFD700', '#FF6347', '#32CD32', '#FF69B4', '#00CED1', '#FFA500'];
+        
+        for (let i = 0; i < this.goals.length; i++) {
+            const goal = this.goals[i];
+            ctx.fillStyle = goalColors[i % goalColors.length];
+            
+            // Dibujar estrella para cada meta
+            ctx.beginPath();
+            const centerX = goal[1] * cellSize + cellSize / 2;
+            const centerY = goal[0] * cellSize + cellSize / 2;
+            const outerRadius = cellSize / 3;
+            const innerRadius = cellSize / 6;
+            const points = 5;
+            
+            for (let p = 0; p < points * 2; p++) {
+                const radius = p % 2 === 0 ? outerRadius : innerRadius;
+                const angle = (Math.PI / points) * p - Math.PI / 2;
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                
+                if (p === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            ctx.fill();
+            
+            // Agregar borde a la estrella
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Número de la meta
+            ctx.fillStyle = '#000';
+            ctx.font = `bold ${cellSize / 3}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText((i + 1).toString(), centerX, centerY);
+        }
 
         // Dibujar agente
         ctx.fillStyle = '#2196F3';

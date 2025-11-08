@@ -1,30 +1,30 @@
-// Clase Agente para Reinforcement Learning
-class Agent {
+// Clase Agente para Reinforcement Learning Multi-Goal
+class AgentMultiGoal {
     constructor(env, alpha = 0.1, gamma = 0.9, epsilon = 0.01, renderTraining = false, pauseTime = 100) {
         this.env = env;
         this.alpha = alpha;           // Learning rate
         this.gamma = gamma;           // Discount factor
         this.epsilon = epsilon;       // Exploration rate
-        this.renderTraining = renderTraining;  // Flag para renderizar el entrenamiento
-        this.pauseTime = pauseTime;   // Tiempo de pausa para el renderizado (en ms)
+        this.renderTraining = renderTraining;
+        this.pauseTime = pauseTime;
         
-        // Tabla Q (ancho*alto, ancho*alto, 4 acciones)
-        // Inicializar con ceros
-        this.Q = this._createQTable(env.width * env.height, env.width * env.height, 4);
+        // Tabla Q (altura, ancho, 4 acciones)
+        this.Q = this._createQTable(env.height, env.width, 4);
         
-        this.maxActionsPerEpisode = Math.floor(env.width * env.height / 2);
+        this.maxActionsPerEpisode = env.width * env.height * 2;
         
-        // Para tracking
+        // Estadísticas multi-goal
+        this.goalsReached = new Array(env.numGoals).fill(0);
         this.currentEpisode = 0;
         this.isTraining = false;
     }
 
-    _createQTable(dim1, dim2, dim3) {
+    _createQTable(height, width, numActions) {
         const table = [];
-        for (let i = 0; i < dim1; i++) {
-            table[i] = [];
-            for (let j = 0; j < dim2; j++) {
-                table[i][j] = new Array(dim3).fill(0);
+        for (let y = 0; y < height; y++) {
+            table[y] = [];
+            for (let x = 0; x < width; x++) {
+                table[y][x] = new Array(numActions).fill(0);
             }
         }
         return table;
@@ -42,7 +42,6 @@ class Agent {
     }
 
     _argmax(array) {
-        // Encuentra el índice del valor máximo en el array
         let maxIndex = 0;
         let maxValue = array[0];
         for (let i = 1; i < array.length; i++) {
@@ -55,7 +54,6 @@ class Agent {
     }
 
     _max(array) {
-        // Encuentra el valor máximo en el array
         return Math.max(...array);
     }
 
@@ -63,6 +61,7 @@ class Agent {
         const rewardsPerEpisode = [];
         let nActions = 0;
         this.isTraining = true;
+        this.goalsReached = new Array(this.env.numGoals).fill(0);
 
         for (let episode = 0; episode < numEpisodes; episode++) {
             this.currentEpisode = episode;
@@ -88,8 +87,10 @@ class Agent {
                 
                 totalReward += reward;
                 
-                if (done) {
-                    console.log(" ... Done!");
+                // Registrar qué meta se alcanzó
+                if (done && result.goalIndex !== null) {
+                    this.goalsReached[result.goalIndex]++;
+                    console.log(` ... Meta ${result.goalIndex + 1} alcanzada!`);
                 }
 
                 // Actualizar la tabla Q (Q-Learning)
@@ -102,9 +103,7 @@ class Agent {
                 state = nextState;
                 nActions++;
 
-                // Renderizar si el flag está activado
                 if (this.renderTraining) {
-                    // Esperar para que se pueda ver la animación
                     await this._sleep(this.pauseTime);
                 }
             }
@@ -121,6 +120,8 @@ class Agent {
             onProgress(numEpisodes, numEpisodes, rewardsPerEpisode[rewardsPerEpisode.length - 1]);
         }
 
+        console.log('Distribución de metas alcanzadas:', this.goalsReached);
+
         this.isTraining = false;
         return rewardsPerEpisode;
     }
@@ -128,6 +129,7 @@ class Agent {
     async trainSARSA(numEpisodes, onProgress = null, onEpisodeComplete = null) {
         const rewardsPerEpisode = [];
         this.isTraining = true;
+        this.goalsReached = new Array(this.env.numGoals).fill(0);
 
         for (let episode = 0; episode < numEpisodes; episode++) {
             this.currentEpisode = episode;
@@ -151,6 +153,11 @@ class Agent {
                 
                 totalReward += reward;
                 
+                // Registrar qué meta se alcanzó
+                if (done && result.goalIndex !== null) {
+                    this.goalsReached[result.goalIndex]++;
+                }
+                
                 const nextAction = this.chooseAction(nextState);
 
                 // Actualizar la tabla Q (SARSA)
@@ -163,7 +170,6 @@ class Agent {
                 state = nextState;
                 action = nextAction;
 
-                // Renderizar si el flag está activado
                 if (this.renderTraining) {
                     await this._sleep(this.pauseTime);
                 }
@@ -181,12 +187,15 @@ class Agent {
             onProgress(numEpisodes, numEpisodes, rewardsPerEpisode[rewardsPerEpisode.length - 1]);
         }
 
+        console.log('Distribución de metas alcanzadas:', this.goalsReached);
+
         this.isTraining = false;
         return rewardsPerEpisode;
     }
 
     async testAgent(numTests, onStateChange = null, onTestComplete = null) {
         const results = [];
+        const testGoalsReached = new Array(this.env.numGoals).fill(0);
 
         for (let test = 0; test < numTests; test++) {
             let state = this.env.reset();
@@ -197,7 +206,7 @@ class Agent {
 
             console.log(`Prueba ${test + 1}:`);
 
-            while (!done) {
+            while (!done && steps < this.maxActionsPerEpisode) {
                 const action = this.chooseAction(state);
                 const result = this.env.step(action);
                 const nextState = result.state;
@@ -210,14 +219,17 @@ class Agent {
                 
                 state = nextState;
 
-                // Callback para actualizar la visualización
                 if (onStateChange) {
                     await onStateChange(state, action, reward, done, steps);
                 }
 
-                // Renderizar el entorno después de cada acción
                 if (this.renderTraining) {
                     await this._sleep(this.pauseTime);
+                }
+                
+                // Registrar qué meta se alcanzó en test
+                if (done && result.goalIndex !== null) {
+                    testGoalsReached[result.goalIndex]++;
                 }
             }
 
@@ -226,17 +238,19 @@ class Agent {
                 steps: steps,
                 totalReward: totalReward,
                 path: path,
-                success: done
+                success: done,
+                goalReached: this.env.reachedGoal
             };
 
             results.push(testResult);
-            console.log(`Test ${test + 1} completed: ${steps} steps, reward: ${totalReward}`);
+            console.log(`Test ${test + 1} completed: ${steps} pasos, meta ${testResult.goalReached !== null ? testResult.goalReached + 1 : 'ninguna'}`);
 
             if (onTestComplete) {
                 await onTestComplete(testResult);
             }
         }
 
+        console.log('Metas alcanzadas en pruebas:', testGoalsReached);
         return results;
     }
 
@@ -244,7 +258,7 @@ class Agent {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // Métodos auxiliares para análisis
+    // Métodos auxiliares
     getQValue(state, action) {
         return this.Q[state[0]][state[1]][action];
     }
@@ -257,7 +271,21 @@ class Agent {
         return this._max(this.Q[state[0]][state[1]]);
     }
 
-    // Exportar/Importar Q-table (para guardar progreso)
+    // Estadísticas de metas alcanzadas
+    getGoalStats() {
+        const total = this.goalsReached.reduce((a, b) => a + b, 0);
+        const distribution = this.goalsReached.map(count => 
+            total > 0 ? (count / total * 100).toFixed(1) + '%' : '0%'
+        );
+        
+        return {
+            counts: this.goalsReached,
+            distribution: distribution,
+            total: total
+        };
+    }
+
+    // Exportar/Importar Q-table
     exportQTable() {
         return {
             Q: this.Q,
@@ -265,7 +293,8 @@ class Agent {
             gamma: this.gamma,
             epsilon: this.epsilon,
             width: this.env.width,
-            height: this.env.height
+            height: this.env.height,
+            goalsReached: this.goalsReached
         };
     }
 
@@ -275,12 +304,15 @@ class Agent {
             this.alpha = data.alpha;
             this.gamma = data.gamma;
             this.epsilon = data.epsilon;
+            if (data.goalsReached) {
+                this.goalsReached = data.goalsReached;
+            }
             return true;
         }
         return false;
     }
 
-    // Visualización de política (para debugging)
+    // Visualización de política
     getPolicy() {
         const policy = [];
         const actionNames = ['↑', '↓', '←', '→'];
@@ -305,7 +337,7 @@ class Agent {
         }
     }
 
-    // Obtener estadísticas de la Q-table
+    // Estadísticas de la Q-table
     getQTableStats() {
         let totalValues = 0;
         let sum = 0;
