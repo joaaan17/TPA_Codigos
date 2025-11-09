@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ejemplo Alumno - Movimientos Aleatorios</title>
+    <title>Sistemas de Reinforcement Learning</title>
     <style>
         * {
             margin: 0;
@@ -12,320 +12,386 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0f0f23;
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+            padding: 40px 20px;
+            color: #e0e0e0;
         }
 
         .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 30px;
-            max-width: 1000px;
-            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
         }
 
-        h1 {
+        .header {
             text-align: center;
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 2em;
+            color: white;
+            margin-bottom: 50px;
+            padding: 40px;
+            background: rgba(30, 30, 50, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .header h1 {
+            font-size: 3.5em;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1em;
+            font-size: 1.3em;
+            opacity: 0.9;
+            color: #b0b0c0;
+            margin-bottom: 20px;
         }
 
-        .controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 30px;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        label {
-            font-weight: 600;
-            color: #555;
-            font-size: 0.9em;
-        }
-
-        input[type="number"], input[type="range"] {
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
+        .intro {
             font-size: 1em;
-            transition: border-color 0.3s;
+            color: #b0b0c0;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
         }
 
-        input[type="number"] {
-            width: 100px;
+        .systems-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
         }
 
-        input[type="range"] {
-            width: 150px;
+        .system-card {
+            background: rgba(30, 30, 50, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            transition: all 0.3s;
+            animation: fadeIn 0.6s ease-out;
         }
 
-        input:focus {
-            outline: none;
+        .system-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
             border-color: #667eea;
         }
 
-        button {
-            padding: 12px 24px;
-            font-size: 1em;
-            font-weight: 600;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        button:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        button:active:not(:disabled) {
-            transform: translateY(0);
-        }
-
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .btn-primary {
+        .system-card h2 {
+            font-size: 2em;
+            margin-bottom: 10px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
-        .btn-success {
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.7em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .badge-basic {
             background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             color: white;
         }
 
-        .btn-warning {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
+        .badge-intermediate {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
         }
 
-        .btn-info {
+        .badge-advanced {
             background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
+            color: #000;
         }
 
-        .canvas-container {
-            display: flex;
-            justify-content: center;
+        .system-description {
+            color: #b0b0c0;
             margin-bottom: 20px;
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 20px;
+            line-height: 1.6;
+            min-height: 80px;
         }
 
-        canvas {
-            border: 3px solid #333;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        .features {
+            list-style: none;
+            margin-bottom: 20px;
         }
 
-        .info {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
+        .features li {
+            padding: 8px 0;
+            color: #b0b0c0;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.1);
         }
 
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 15px;
+        .features li:last-child {
+            border-bottom: none;
         }
 
-        .info-item {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .info-label {
-            font-weight: 600;
-            color: #666;
-            font-size: 0.9em;
-            margin-bottom: 5px;
-        }
-
-        .info-value {
-            font-size: 1.5em;
+        .features li::before {
+            content: "✓";
+            color: #38ef7d;
             font-weight: bold;
-            color: #333;
+            margin-right: 10px;
         }
 
-        .legend {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .legend-color {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 2px solid #333;
-        }
-
-        .legend-agent { background: #2196F3; }
-        .legend-goal { background: #f44336; }
-        .legend-obstacle { background: #000; }
-        .legend-empty { background: #fff; }
-
-        .status-badge {
+        .btn {
             display: inline-block;
-            padding: 5px 15px;
-            border-radius: 20px;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
             font-weight: 600;
-            font-size: 0.9em;
-        }
-
-        .status-running {
-            background: #4caf50;
-            color: white;
-        }
-
-        .status-paused {
-            background: #ff9800;
-            color: white;
-        }
-
-        .status-completed {
-            background: #2196f3;
-            color: white;
-        }
-
-        .status-stopped {
-            background: #9e9e9e;
-            color: white;
-        }
-
-        .speed-display {
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
             text-align: center;
-            color: #555;
-            margin-top: 5px;
-            font-size: 0.9em;
+            width: 100%;
+            display: block;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(102, 126, 234, 0.5);
+            filter: brightness(1.1);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .btn-special {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            animation: glow-special 2s infinite;
+        }
+
+        @keyframes glow-special {
+            0%, 100% {
+                box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
+            }
+            50% {
+                box-shadow: 0 6px 30px rgba(79, 172, 254, 0.8);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .comparison {
+            background: rgba(30, 30, 50, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .comparison h2 {
+            font-size: 2em;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        th {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        td {
+            color: #b0b0c0;
+        }
+
+        .emoji-large {
+            font-size: 3em;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .highlight {
+            color: #4facfe;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎯 Ejemplo Alumno</h1>
-        <p class="subtitle">Agente con movimientos aleatorios en Environment2D</p>
-        
-        <div class="controls">
-            <div class="control-group">
-                <label for="width">Ancho:</label>
-                <input type="number" id="width" value="15" min="5" max="30">
+        <div class="header">
+            <h1>🤖 Sistemas de Reinforcement Learning</h1>
+            <p class="subtitle">Elige tu Sistema de Aprendizaje</p>
+            <p class="intro">
+                Explora tres implementaciones diferentes de RL: desde lo básico hasta sistemas avanzados con objetivos dinámicos. 
+                Cada sistema está optimizado para diferentes casos de uso.
+            </p>
+        </div>
+
+        <div class="systems-grid">
+            <!-- Single-Goal System -->
+            <div class="system-card">
+                <span class="emoji-large">🎯</span>
+                <h2>Single-Goal <span class="badge badge-basic">BÁSICO</span></h2>
+                <p class="system-description">
+                    Sistema básico con una única meta fija. Ideal para aprender los fundamentos de Q-Learning y SARSA.
+                </p>
+                <ul class="features">
+                    <li>1 meta fija</li>
+                    <li>Entrenamiento rápido</li>
+                    <li>Política determinista</li>
+                    <li>Q-Learning y SARSA</li>
+                </ul>
+                <a href="SingleGoal/index.html" class="btn btn-success">Abrir Single-Goal →</a>
             </div>
-            <div class="control-group">
-                <label for="height">Alto:</label>
-                <input type="number" id="height" value="15" min="5" max="30">
+
+            <!-- Multi-Goal System -->
+            <div class="system-card">
+                <span class="emoji-large">⭐</span>
+                <h2>Multi-Goal <span class="badge badge-intermediate">INTERMEDIO</span></h2>
+                <p class="system-description">
+                    Sistema con múltiples metas aleatorias. El agente aprende a alcanzar la meta más cercana.
+                </p>
+                <ul class="features">
+                    <li>2-8 metas configurables</li>
+                    <li>Mejor exploración</li>
+                    <li>Más robusto</li>
+                    <li>Estrellas de colores</li>
+                </ul>
+                <a href="MultiGoal/index.html" class="btn">Abrir Multi-Goal →</a>
             </div>
-            <div class="control-group">
-                <label for="obstacles">Obstáculos (%):</label>
-                <input type="number" id="obstacles" value="0" min="0" max="50" step="5">
-            </div>
-            <div class="control-group">
-                <label for="speed">Velocidad (ms):</label>
-                <input type="range" id="speed" min="50" max="1000" value="200" step="50">
-                <div class="speed-display"><span id="speedValue">200</span> ms</div>
+
+            <!-- Goal-Conditioned System -->
+            <div class="system-card">
+                <span class="emoji-large">🚀</span>
+                <h2>Goal-Conditioned <span class="badge badge-advanced">AVANZADO</span></h2>
+                <p class="system-description">
+                    <strong class="highlight">¡INTERACTIVO!</strong> Haz click en el grid para cambiar el objetivo. 
+                    El agente navega sin re-entrenar. <strong>¡El más impresionante!</strong>
+                </p>
+                <ul class="features">
+                    <li>Objetivo dinámico (click)</li>
+                    <li>Sin re-entrenamiento</li>
+                    <li>Generalización total</li>
+                    <li>100% interactivo</li>
+                </ul>
+                <a href="GoalConditioned/index.html" class="btn btn-special">Abrir Goal-Conditioned → ⭐</a>
             </div>
         </div>
 
-        <div class="controls">
-            <button class="btn-primary" onclick="createNewEnvironment()">Crear Nuevo Entorno</button>
-            <button class="btn-success" id="startBtn" onclick="startSimulation()">▶ Iniciar</button>
-            <button class="btn-warning" id="pauseBtn" onclick="pauseSimulation()" disabled>⏸ Pausar</button>
-            <button class="btn-info" onclick="stepSimulation()">⏭ Paso a Paso</button>
-            <button class="btn-primary" onclick="resetSimulation()">🔄 Reiniciar</button>
+        <!-- Comparison Table -->
+        <div class="comparison">
+            <h2>📊 Comparación Detallada</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Característica</th>
+                        <th>Single-Goal</th>
+                        <th>Multi-Goal</th>
+                        <th>Goal-Conditioned</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Número de Metas</strong></td>
+                        <td>1 fija</td>
+                        <td>3-8 aleatorias</td>
+                        <td class="highlight">∞ dinámicas</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Interactividad</strong></td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td class="highlight">Sí (Click en grid)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cambiar Objetivo</strong></td>
+                        <td>Re-entrenar</td>
+                        <td>Re-entrenar</td>
+                        <td class="highlight">Sin re-entrenar</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Tiempo Entrenamiento</strong></td>
+                        <td>2-5 segundos</td>
+                        <td>5-10 segundos</td>
+                        <td>5-15 segundos</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Episodios Recomendados</strong></td>
+                        <td>1000</td>
+                        <td>1500</td>
+                        <td>1500-2000</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Dificultad</strong></td>
+                        <td>🟢 Fácil</td>
+                        <td>🟡 Media</td>
+                        <td>🟠 Media-Alta</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Mejor Para</strong></td>
+                        <td>Aprender RL</td>
+                        <td>Múltiples destinos</td>
+                        <td class="highlight">Aplicaciones reales</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
-        <div class="canvas-container">
-            <canvas id="canvas"></canvas>
-        </div>
-
-        <div class="legend">
-            <div class="legend-item">
-                <div class="legend-color legend-agent"></div>
-                <span>Agente</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color legend-goal"></div>
-                <span>Objetivo</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color legend-obstacle"></div>
-                <span>Obstáculo</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color legend-empty"></div>
-                <span>Vacío</span>
-            </div>
-        </div>
-
-        <div class="info">
-            <div class="info-grid">
-                <div class="info-item">
-                    <div class="info-label">Estado Actual</div>
-                    <div class="info-value" id="state">(0, 0)</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Objetivo</div>
-                    <div class="info-value" id="goal">(14, 14)</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Pasos</div>
-                    <div class="info-value" id="steps">0</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Recompensa Total</div>
-                    <div class="info-value" id="reward">0</div>
-                </div>
-            </div>
-            <div style="text-align: center; margin-top: 15px;">
-                <strong>Estado: </strong>
-                <span class="status-badge status-stopped" id="statusBadge">Detenido</span>
+        <!-- Quick Start Guide -->
+        <div class="comparison">
+            <h2>🚀 Guía de Inicio Rápido</h2>
+            <div style="color: #b0b0c0; line-height: 1.8;">
+                <h3 style="color: #667eea; margin: 20px 0 10px;">Para Principiantes:</h3>
+                <p>1. Empieza con <a href="SingleGoal/index.html" style="color: #38ef7d;">Single-Goal</a></p>
+                <p>2. Experimenta con parámetros</p>
+                <p>3. Compara Q-Learning vs SARSA</p>
+                
+                <h3 style="color: #667eea; margin: 20px 0 10px;">Para Experimentar:</h3>
+                <p>1. Prueba <a href="MultiGoal/index.html" style="color: #FFD700;">Multi-Goal</a></p>
+                <p>2. Observa distribución de metas</p>
+                <p>3. Ve cómo generaliza a múltiples objetivos</p>
+                
+                <h3 style="color: #667eea; margin: 20px 0 10px;">Para Impresionar: ⭐</h3>
+                <p>1. Abre <a href="GoalConditioned/index.html" style="color: #4facfe; font-weight: bold;">Goal-Conditioned</a></p>
+                <p>2. Click en "Entrenar" y espera</p>
+                <p>3. <strong style="color: #FFD700;">Haz CLICK en cualquier celda del grid</strong></p>
+                <p>4. ¡Observa la magia! El agente navega sin re-entrenar 🎯✨</p>
             </div>
         </div>
     </div>
-
-    <script src="env_2D.js"></script>
-    <script src="ej_alumn.js"></script>
 </body>
 </html>
-
