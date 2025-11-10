@@ -4,256 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistemas de Reinforcement Learning</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #0f0f23;
-            min-height: 100vh;
-            padding: 40px 20px;
-            color: #e0e0e0;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 50px;
-            padding: 40px;
-            background: rgba(30, 30, 50, 0.6);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(102, 126, 234, 0.2);
-        }
-
-        .header h1 {
-            font-size: 3.5em;
-            margin-bottom: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .subtitle {
-            font-size: 1.3em;
-            opacity: 0.9;
-            color: #b0b0c0;
-            margin-bottom: 20px;
-        }
-
-        .intro {
-            font-size: 1em;
-            color: #b0b0c0;
-            max-width: 800px;
-            margin: 0 auto;
-            line-height: 1.6;
-        }
-
-        .systems-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 30px;
-            margin-bottom: 50px;
-        }
-
-        .system-card {
-            background: rgba(30, 30, 50, 0.6);
-            backdrop-filter: blur(20px);
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(102, 126, 234, 0.2);
-            transition: all 0.3s;
-            animation: fadeIn 0.6s ease-out;
-        }
-
-        .system-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
-            border-color: #667eea;
-        }
-
-        .system-card h2 {
-            font-size: 2em;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.7em;
-            font-weight: bold;
-            margin-left: 10px;
-        }
-
-        .badge-basic {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
-        }
-
-        .badge-intermediate {
-            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-            color: #000;
-        }
-
-        .badge-advanced {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: #000;
-        }
-
-        .system-description {
-            color: #b0b0c0;
-            margin-bottom: 20px;
-            line-height: 1.6;
-            min-height: 80px;
-        }
-
-        .features {
-            list-style: none;
-            margin-bottom: 20px;
-        }
-
-        .features li {
-            padding: 8px 0;
-            color: #b0b0c0;
-            border-bottom: 1px solid rgba(102, 126, 234, 0.1);
-        }
-
-        .features li:last-child {
-            border-bottom: none;
-        }
-
-        .features li::before {
-            content: "✓";
-            color: #38ef7d;
-            font-weight: bold;
-            margin-right: 10px;
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 15px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 10px;
-            font-weight: 600;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-            text-align: center;
-            width: 100%;
-            display: block;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(102, 126, 234, 0.5);
-            filter: brightness(1.1);
-        }
-
-        .btn-success {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        }
-
-        .btn-special {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            animation: glow-special 2s infinite;
-        }
-
-        @keyframes glow-special {
-            0%, 100% {
-                box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
-            }
-            50% {
-                box-shadow: 0 6px 30px rgba(79, 172, 254, 0.8);
-            }
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .comparison {
-            background: rgba(30, 30, 50, 0.6);
-            backdrop-filter: blur(20px);
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(102, 126, 234, 0.2);
-            margin-bottom: 30px;
-        }
-
-        .comparison h2 {
-            font-size: 2em;
-            margin-bottom: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-align: center;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid rgba(102, 126, 234, 0.2);
-        }
-
-        th {
-            background: rgba(102, 126, 234, 0.2);
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        td {
-            color: #b0b0c0;
-        }
-
-        .emoji-large {
-            font-size: 3em;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .highlight {
-            color: #4facfe;
-            font-weight: bold;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🤖 Sistemas de Reinforcement Learning</h1>
+            <h1>Sistemas de Reinforcement Learning</h1>
             <p class="subtitle">Elige tu Sistema de Aprendizaje</p>
             <p class="intro">
                 Explora tres implementaciones diferentes de RL: desde lo básico hasta sistemas avanzados con objetivos dinámicos. 
@@ -264,8 +20,7 @@
         <div class="systems-grid">
             <!-- Single-Goal System -->
             <div class="system-card">
-                <span class="emoji-large">🎯</span>
-                <h2>Single-Goal <span class="badge badge-basic">BÁSICO</span></h2>
+                <h2>Single-Goal </h2>
                 <p class="system-description">
                     Sistema básico con una única meta fija. Ideal para aprender los fundamentos de Q-Learning y SARSA.
                 </p>
@@ -275,13 +30,12 @@
                     <li>Política determinista</li>
                     <li>Q-Learning y SARSA</li>
                 </ul>
-                <a href="SingleGoal/index.html" class="btn btn-success">Abrir Single-Goal →</a>
+                <a href="SingleGoal/index.html" class="btn">Abrir</a>
             </div>
 
             <!-- Multi-Goal System -->
             <div class="system-card">
-                <span class="emoji-large">⭐</span>
-                <h2>Multi-Goal <span class="badge badge-intermediate">INTERMEDIO</span></h2>
+                <h2>Multi-Goal </h2>
                 <p class="system-description">
                     Sistema con múltiples metas aleatorias. El agente aprende a alcanzar la meta más cercana.
                 </p>
@@ -291,13 +45,12 @@
                     <li>Más robusto</li>
                     <li>Estrellas de colores</li>
                 </ul>
-                <a href="MultiGoal/index.html" class="btn">Abrir Multi-Goal →</a>
+                <a href="MultiGoal/index.html" class="btn">Abrir</a>
             </div>
 
             <!-- Goal-Conditioned System -->
             <div class="system-card">
-                <span class="emoji-large">🚀</span>
-                <h2>Goal-Conditioned <span class="badge badge-advanced">AVANZADO</span></h2>
+                <h2>Goal-Conditioned </h2>
                 <p class="system-description">
                     <strong class="highlight">¡INTERACTIVO!</strong> Haz click en el grid para cambiar el objetivo. 
                     El agente navega sin re-entrenar. <strong>¡El más impresionante!</strong>
@@ -308,13 +61,29 @@
                     <li>Generalización total</li>
                     <li>100% interactivo</li>
                 </ul>
-                <a href="GoalConditioned/index.html" class="btn btn-special">Abrir Goal-Conditioned → ⭐</a>
+                <a href="GoalConditioned/index.html" class="btn">Abrir</a>
+            </div>
+
+            <!-- Mountain Car System -->
+            <div class="system-card">
+                <h2>Mountain Car </h2>
+                <p class="system-description">
+                    Problema clásico de RL con espacio de estados continuo. El coche debe usar impulso para llegar a la meta. 
+                    <strong>Entrenamiento rápido optimizado.</strong>
+                </p>
+                <ul class="features">
+                    <li>Ambiente continuo (clásico)</li>
+                    <li>Estrategia contraintuitiva</li>
+                    <li>Recompensas escasas</li>
+                    <li>Entrenamiento en segundos</li>
+                </ul>
+                <a href="MountainCar/index.html" class="btn">Abrir</a>
             </div>
         </div>
 
         <!-- Comparison Table -->
         <div class="comparison">
-            <h2>📊 Comparación Detallada</h2>
+            <h2>Comparación Detallada</h2>
             <table>
                 <thead>
                     <tr>
@@ -322,50 +91,58 @@
                         <th>Single-Goal</th>
                         <th>Multi-Goal</th>
                         <th>Goal-Conditioned</th>
+                        <th>Mountain Car</th>
                     </tr>
                 </thead>
                 <tbody>
+                    <tr>
+                        <td><strong>Tipo de Espacio</strong></td>
+                        <td>Discreto 2D</td>
+                        <td>Discreto 2D</td>
+                        <td>Discreto 2D</td>
+                        <td class="highlight">Continuo 1D</td>
+                    </tr>
                     <tr>
                         <td><strong>Número de Metas</strong></td>
                         <td>1 fija</td>
                         <td>3-8 aleatorias</td>
                         <td class="highlight">∞ dinámicas</td>
+                        <td>1 fija (pos ≥ 0.5)</td>
                     </tr>
                     <tr>
                         <td><strong>Interactividad</strong></td>
                         <td>No</td>
                         <td>No</td>
-                        <td class="highlight">Sí (Click en grid)</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Cambiar Objetivo</strong></td>
-                        <td>Re-entrenar</td>
-                        <td>Re-entrenar</td>
-                        <td class="highlight">Sin re-entrenar</td>
+                        <td class="highlight">Sí (Click)</td>
+                        <td>No</td>
                     </tr>
                     <tr>
                         <td><strong>Tiempo Entrenamiento</strong></td>
                         <td>2-5 segundos</td>
                         <td>5-10 segundos</td>
                         <td>5-15 segundos</td>
+                        <td class="highlight">3-8 segundos</td>
                     </tr>
                     <tr>
                         <td><strong>Episodios Recomendados</strong></td>
                         <td>1000</td>
                         <td>1500</td>
                         <td>1500-2000</td>
+                        <td>1000</td>
                     </tr>
                     <tr>
                         <td><strong>Dificultad</strong></td>
                         <td>🟢 Fácil</td>
                         <td>🟡 Media</td>
                         <td>🟠 Media-Alta</td>
+                        <td>🟠 Media-Alta</td>
                     </tr>
                     <tr>
                         <td><strong>Mejor Para</strong></td>
                         <td>Aprender RL</td>
                         <td>Múltiples destinos</td>
-                        <td class="highlight">Aplicaciones reales</td>
+                        <td class="highlight">Apps reales</td>
+                        <td class="highlight">Problema clásico</td>
                     </tr>
                 </tbody>
             </table>
@@ -373,7 +150,7 @@
 
         <!-- Quick Start Guide -->
         <div class="comparison">
-            <h2>🚀 Guía de Inicio Rápido</h2>
+            <h2>Guía de Inicio Rápido</h2>
             <div style="color: #b0b0c0; line-height: 1.8;">
                 <h3 style="color: #667eea; margin: 20px 0 10px;">Para Principiantes:</h3>
                 <p>1. Empieza con <a href="SingleGoal/index.html" style="color: #38ef7d;">Single-Goal</a></p>
@@ -385,11 +162,17 @@
                 <p>2. Observa distribución de metas</p>
                 <p>3. Ve cómo generaliza a múltiples objetivos</p>
                 
-                <h3 style="color: #667eea; margin: 20px 0 10px;">Para Impresionar: ⭐</h3>
+                <h3 style="color: #667eea; margin: 20px 0 10px;">Para Impresionar:</h3>
                 <p>1. Abre <a href="GoalConditioned/index.html" style="color: #4facfe; font-weight: bold;">Goal-Conditioned</a></p>
                 <p>2. Click en "Entrenar" y espera</p>
                 <p>3. <strong style="color: #FFD700;">Haz CLICK en cualquier celda del grid</strong></p>
-                <p>4. ¡Observa la magia! El agente navega sin re-entrenar 🎯✨</p>
+                <p>4. ¡Observa la magia! El agente navega sin re-entrenar </p>
+                
+                <h3 style="color: #667eea; margin: 20px 0 10px;">Para Problema Clásico:</h3>
+                <p>1. Abre <a href="MountainCar/index.html" style="color: #FFD700;">Mountain Car</a></p>
+                <p>2. Click en "Entrenar" (optimizado, sin visualización)</p>
+                <p>3. Espera ~5-10 segundos</p>
+                <p>4. Click "Probar Agente" para ver la estrategia aprendida</p>
             </div>
         </div>
     </div>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mountain Car - Reinforcement Learning</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Mountain Car</h1>
+            <p class="subtitle">Aprendizaje por Refuerzo en Ambiente Continuo</p>
+        </div>
+        
+        <!-- Panel de Simulación (Grande, arriba) -->
+        <div class="canvas-panel-large">
+            <h2>Simulación</h2>
+            <div class="canvas-container-large">
+                <canvas id="mountainCanvas"></canvas>
+            </div>
+            <div class="info-cards">
+                <div class="info-card">
+                    <div class="info-label">Posición</div>
+                    <div class="info-value" id="positionValue">-0.50</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Velocidad</div>
+                    <div class="info-value" id="velocityValue">0.00</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Pasos</div>
+                    <div class="info-value" id="stepsValue">0</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Recompensa Total</div>
+                    <div class="info-value" id="rewardValue">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Paneles inferiores en grid -->
+        <div class="main-content">
+            <!-- Configuración de Entrenamiento -->
+            <div class="controls-panel">
+                <h2>Configuración de Entrenamiento</h2>
+                <div class="config-grid">
+                    <div class="control-group">
+                        <label for="algorithm">Algoritmo:</label>
+                        <select id="algorithm">
+                            <option value="qlearning">Q-Learning</option>
+                            <option value="sarsa">SARSA</option>
+                        </select>
+                    </div>
+                        <div class="control-group">
+                            <label for="alpha">Alpha (α):</label>
+                            <input type="number" id="alpha" value="0.5" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="gamma">Gamma (γ):</label>
+                            <input type="number" id="gamma" value="0.999" min="0" max="1" step="0.001">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilon">Epsilon (ε):</label>
+                            <input type="number" id="epsilon" value="1.0" min="0" max="1" step="0.01">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilonDecay">Decay ε:</label>
+                            <input type="number" id="epsilonDecay" value="0.999" min="0.9" max="1" step="0.001">
+                        </div>
+                        <div class="control-group">
+                            <label for="epsilonMin">Min ε:</label>
+                            <input type="number" id="epsilonMin" value="0.01" min="0" max="0.1" step="0.01">
+                        </div>
+                    <div class="control-group">
+                        <label for="episodes">Episodios:</label>
+                        <input type="number" id="episodes" value="1000" min="100" max="5000" step="100">
+                    </div>
+                    <div class="control-group" style="grid-column: span 2;">
+                        <div style="background: rgba(79, 172, 254, 0.1); border: 1px solid rgba(79, 172, 254, 0.3); border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="color: #4facfe; font-weight: 600;">Entrenamiento Rápido</span>
+                            <p style="margin: 5px 0 0 0; font-size: 0.85em; color: #b0b0c0;">Sin visualización durante entrenamiento - Solo verás el resultado final</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-success" id="trainBtn" onclick="startTraining()">Entrenar</button>
+                    <button class="btn btn-warning" id="stopBtn" onclick="stopTraining()" disabled>Detener</button>
+                    <button class="btn btn-info" id="testBtn" onclick="testAgent()" disabled>Probar Agente</button>
+                </div>
+            </div>
+
+            <!-- Estado del Entrenamiento -->
+            <div class="info-panel">
+                <h2>Estado del Entrenamiento</h2>
+                <div class="status-container">
+                    <span class="status-badge status-stopped" id="statusBadge">Listo</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressBar" style="width: 0%;">0%</div>
+                </div>
+                <div class="info-cards">
+                    <div class="info-card">
+                        <div class="info-label">Episodio</div>
+                        <div class="info-value" id="episodeValue">0</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Recompensa Episodio</div>
+                        <div class="info-value" id="episodeRewardValue">0</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Promedio (últimos 100)</div>
+                        <div class="info-value" id="avgRewardValue">0</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Mejor Recompensa</div>
+                        <div class="info-value" id="bestRewardValue">-200</div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+
+        <!-- Gráfico de Progreso (Grande, toda la fila) -->
+        <div class="chart-panel-large">
+            <h2>Evolución del Agente (Distancia a la Meta)</h2>
+            <div class="chart-container-large">
+                <canvas id="rewardChart"></canvas>
+            </div>
+        </div>
+
+        <div class="info-description">
+            <h3>Acerca del Mountain Car</h3>
+            <div class="description-grid">
+                <div class="description-card">
+                    <h4>Objetivo</h4>
+                    <p>El coche debe llegar a la cima de la colina derecha (posición ≥ 0.5). El problema es que no tiene suficiente potencia para subir directamente.</p>
+                </div>
+                <div class="description-card">
+                    <h4>Estrategia Óptima</h4>
+                    <p>Debe retroceder primero hacia la colina izquierda para ganar impulso, luego acelerar hacia la derecha aprovechando la inercia acumulada.</p>
+                </div>
+                <div class="description-card">
+                    <h4>Espacio de Estados</h4>
+                    <p><strong>Posición:</strong> [-1.2, 0.6]<br>
+                       <strong>Velocidad:</strong> [-0.07, 0.07]</p>
+                </div>
+                <div class="description-card">
+                    <h4>Acciones</h4>
+                    <p><strong>0:</strong> Acelerar izquierda<br>
+                       <strong>1:</strong> No acelerar<br>
+                       <strong>2:</strong> Acelerar derecha</p>
+                </div>
+                <div class="description-card">
+                    <h4>Recompensas</h4>
+                    <p>Cada paso: <strong>-1</strong><br>
+                       El episodio termina al alcanzar la meta o tras <strong>400 pasos</strong>.</p>
+                </div>
+                <div class="description-card">
+                    <h4>Concepto Clave</h4>
+                    <p>Ejemplo paradigmático de <strong>recompensas escasas (sparse rewards)</strong> y estrategia a largo plazo. Requiere exploración activa para descubrir la solución contraintuitiva.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay de carga -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Entrenando Agente</div>
+            <div class="loading-subtext">El agente está aprendiendo a conquistar la montaña...</div>
+            <div class="loading-progress" id="loadingProgress">0%</div>
+            <div class="loading-tip">Esto tomará solo unos segundos</div>
+        </div>
+    </div>
+
+    <script src="mountaincar.js"></script>
+    <script src="agent.js"></script>
+    <script src="training.js"></script>
+</body>
+</html>
