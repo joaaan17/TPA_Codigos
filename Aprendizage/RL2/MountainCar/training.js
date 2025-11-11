@@ -179,18 +179,6 @@ function drawChart() {
         ctx.stroke();
     }
     
-    // Leyenda
-    ctx.font = '11px Arial';
-    ctx.fillStyle = '#667eea';
-    ctx.fillText('━ Distancia', width - 100, 30);
-    ctx.fillStyle = '#ff6b6b';
-    ctx.fillText('━ Promedio (100)', width - 100, 45);
-    
-    // Nota: menos distancia es mejor
-    ctx.fillStyle = '#90EE90';
-    ctx.font = '10px Arial';
-    ctx.fillText('↑ Mejor (más cerca)', width - 120, height - margin.bottom + 25);
-    
     // Línea de meta (distancia = 0)
     if (minDistance === 0) {
         ctx.strokeStyle = '#FFD700';
@@ -202,11 +190,6 @@ function drawChart() {
         ctx.lineTo(width - margin.right, goalY);
         ctx.stroke();
         ctx.setLineDash([]);
-        
-        ctx.fillStyle = '#FFD700';
-        ctx.font = '10px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('META', margin.left + 5, goalY - 5);
     }
     
     // Valores en los ejes

@@ -3,34 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Goal-Conditioned RL - Objetivo Dinámico</title>
+    <title>Entrenamiento de Agentes RL</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Goal-Conditioned RL</h1>
-            <p class="subtitle">Aprende a Navegar a CUALQUIER Objetivo - Sin Re-entrenar</p>
-            <div class="info-box">
-                <strong>Modo Interactivo:</strong> Después de entrenar, haz <strong>CLICK en el grid</strong> para cambiar el objetivo. 
-                El agente navegará al nuevo objetivo <strong>sin necesidad de re-entrenar</strong>.
-            </div>
-        </div>
+        <h1>Entrenamiento de Agentes RL</h1>
+        <p class="subtitle">Q-Learning y SARSA en Environment2D</p>
 
         <!-- Panel de Visualización (Grande, arriba) -->
         <div class="canvas-panel-large">
-            <h2>Visualización Interactiva - Click para Cambiar Objetivo</h2>
+            <h2>Visualización del Entorno</h2>
             <div class="canvas-container-large">
                 <canvas id="canvas"></canvas>
             </div>
             <div class="info-cards">
                 <div class="info-card">
-                    <div class="info-label">Posición Agente</div>
+                    <div class="info-label">Posición</div>
                     <div class="info-value" id="agentPos">(0, 0)</div>
-                </div>
-                <div class="info-card highlight">
-                    <div class="info-label">Objetivo Actual</div>
-                    <div class="info-value" id="goalPos">(9, 9)</div>
                 </div>
                 <div class="info-card">
                     <div class="info-label">Pasos</div>
@@ -74,7 +64,11 @@
                     </div>
                     <div class="control-group">
                         <label for="numEpisodes">Episodios:</label>
-                        <input type="number" id="numEpisodes" value="1500" min="500" max="10000" step="100">
+                        <input type="number" id="numEpisodes" value="1000" min="100" max="10000" step="100">
+                    </div>
+                    <div class="control-group">
+                        <label for="envObstacles">Obstáculos (%):</label>
+                        <input type="number" id="envObstacles" value="10" min="0" max="40" step="5">
                     </div>
                     <div class="control-group">
                         <label for="envWidth">Ancho Grid:</label>
@@ -83,10 +77,6 @@
                     <div class="control-group">
                         <label for="envHeight">Alto Grid:</label>
                         <input type="number" id="envHeight" value="10" min="5" max="20">
-                    </div>
-                    <div class="control-group">
-                        <label for="envObstacles">Obstáculos (%):</label>
-                        <input type="number" id="envObstacles" value="10" min="0" max="40" step="5">
                     </div>
                     <div class="control-group">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -105,7 +95,7 @@
 
             <!-- Estado del Entrenamiento -->
             <div class="info-panel">
-                <h2>Estado del Entrenamiento</h2>
+                <h2> Estado del Entrenamiento</h2>
                 <div class="status-container">
                     <span class="status-badge status-stopped" id="statusBadge">Listo</span>
                 </div>
@@ -137,16 +127,12 @@
                     <label for="numTests">Número de Pruebas:</label>
                     <input type="number" id="numTests" value="5" min="1" max="20">
                 </div>
-                
-                <div class="info-box" style="margin-top: 15px;">
-                    <strong>Tip:</strong> Después de entrenar, prueba haciendo click en diferentes celdas del grid para ver al agente navegar hacia ellas.
-                </div>
             </div>
         </div>
 
         <!-- Gráfico de Progreso (Grande, toda la fila) -->
         <div class="chart-panel-large">
-            <h2>Evolución Goal-Conditioned (Recompensas por Episodio)</h2>
+            <h2>Evolución del Agente (Recompensas por Episodio)</h2>
             <div class="chart-container-large">
                 <canvas id="rewardChart"></canvas>
             </div>
@@ -158,3 +144,4 @@
     <script src="training.js"></script>
 </body>
 </html>
+

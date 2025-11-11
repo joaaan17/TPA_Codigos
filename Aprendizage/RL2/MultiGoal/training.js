@@ -279,6 +279,15 @@ function updateChart(rewards) {
     ctx.fillText(maxReward.toFixed(0), margin.left - 5, margin.top + 15);
     ctx.fillText(minReward.toFixed(0), margin.left - 5, height - margin.bottom);
     
+    // Añadir etiquetas del eje X (episodios)
+    ctx.textAlign = 'center';
+    const numXLabels = 5;
+    for (let i = 0; i <= numXLabels; i++) {
+        const episodeNum = Math.round((i / numXLabels) * (rewards.length - 1));
+        const x = margin.left + (i / numXLabels) * chartWidth;
+        ctx.fillText(episodeNum, x, height - margin.bottom + 20);
+    }
+    
     ctx.strokeStyle = '#667eea';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -295,11 +304,6 @@ function updateChart(rewards) {
     }
     
     ctx.stroke();
-    
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 14px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(`Recompensa Promedio Multi-Goal (últimos ${windowSize} episodios)`, width / 2, 15);
 }
 
 // Atajos de teclado

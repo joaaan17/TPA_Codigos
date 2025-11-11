@@ -14,28 +14,20 @@ color: #e0e0e0;
 max-width: 1600px;
 margin: 0 auto;
 }
-.header {
+.container > h1 {
 text-align: center;
-color: white;
-margin-bottom: 30px;
-padding: 30px;
-background: rgba(30, 30, 50, 0.6);
-backdrop-filter: blur(20px);
-border-radius: 20px;
-box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-border: 1px solid rgba(102, 126, 234, 0.2);
-}
-.header h1 {
 font-size: 3em;
 margin-bottom: 10px;
 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 -webkit-background-clip: text;
 -webkit-text-fill-color: transparent;
 background-clip: text;
-text-shadow: none;
+color: white;
 }
 .subtitle {
+text-align: center;
 font-size: 1.2em;
+margin-bottom: 30px;
 opacity: 0.9;
 color: #b0b0c0;
 }
