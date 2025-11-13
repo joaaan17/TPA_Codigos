@@ -84,7 +84,7 @@ async function startTraining() {
     const renderTraining = renderTrainingElement ? renderTrainingElement.checked : false;
 
     // Crear agente
-    agent = new Agent(env, alpha, gamma, epsilon, renderTraining, 10);
+    agent = new Agent(env, alpha, gamma, epsilon, renderTraining, 10, canvas);
     
     addLog(`Agente creado con α=${alpha}, γ=${gamma}, ε=${epsilon}`);
     addLog(`Iniciando entrenamiento con ${algorithm.toUpperCase()}...`);

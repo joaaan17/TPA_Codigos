@@ -86,7 +86,7 @@ async function startTraining() {
     const renderTraining = renderTrainingElement ? renderTrainingElement.checked : false;
 
     // Crear agente multi-goal
-    agent = new AgentMultiGoal(env, alpha, gamma, epsilon, renderTraining, 10);
+    agent = new AgentMultiGoal(env, alpha, gamma, epsilon, renderTraining, 10, canvas);
     
     addLog(`Agente Multi-Goal creado con α=${alpha}, γ=${gamma}, ε=${epsilon}`);
     addLog(`Iniciando entrenamiento con ${algorithm.toUpperCase()}...`);

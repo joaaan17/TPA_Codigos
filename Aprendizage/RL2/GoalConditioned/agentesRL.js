@@ -1,12 +1,13 @@
 // Agente Goal-Conditioned - Aprende a navegar a CUALQUIER objetivo
 class AgentGoalConditioned {
-    constructor(env, alpha = 0.1, gamma = 0.9, epsilon = 0.01, renderTraining = false, pauseTime = 100) {
+    constructor(env, alpha = 0.1, gamma = 0.9, epsilon = 0.01, renderTraining = false, pauseTime = 100, canvas = null) {
         this.env = env;
         this.alpha = alpha;
         this.gamma = gamma;
         this.epsilon = epsilon;
         this.renderTraining = renderTraining;
         this.pauseTime = pauseTime;
+        this.canvas = canvas;
         
         // Q-Table: almacena conocimiento de navegación general
         // La generalización viene de entrenar con múltiples objetivos
@@ -141,7 +142,8 @@ class AgentGoalConditioned {
                 state = nextState;
                 nActions++;
 
-                if (this.renderTraining) {
+                if (this.renderTraining && this.canvas) {
+                    this.env.render(this.canvas);
                     await this._sleep(this.pauseTime);
                 }
             }
@@ -214,7 +216,8 @@ class AgentGoalConditioned {
                 state = nextState;
                 action = nextAction;
 
-                if (this.renderTraining) {
+                if (this.renderTraining && this.canvas) {
+                    this.env.render(this.canvas);
                     await this._sleep(this.pauseTime);
                 }
             }

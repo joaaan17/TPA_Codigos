@@ -1,12 +1,13 @@
 // Clase Agente para Reinforcement Learning
 class Agent {
-    constructor(env, alpha = 0.1, gamma = 0.9, epsilon = 0.01, renderTraining = false, pauseTime = 100) {
+    constructor(env, alpha = 0.1, gamma = 0.9, epsilon = 0.01, renderTraining = false, pauseTime = 100, canvas = null) {
         this.env = env;
         this.alpha = alpha;           // Learning rate
         this.gamma = gamma;           // Discount factor
         this.epsilon = epsilon;       // Exploration rate
         this.renderTraining = renderTraining;  // Flag para renderizar el entrenamiento
         this.pauseTime = pauseTime;   // Tiempo de pausa para el renderizado (en ms)
+        this.canvas = canvas;         // Canvas para renderizar durante el entrenamiento
         
         // Tabla Q (ancho*alto, ancho*alto, 4 acciones)
         // Inicializar con ceros
@@ -103,7 +104,9 @@ class Agent {
                 nActions++;
 
                 // Renderizar si el flag está activado
-                if (this.renderTraining) {
+                if (this.renderTraining && this.canvas) {
+                    // Renderizar el entorno en cada paso
+                    this.env.render(this.canvas);
                     // Esperar para que se pueda ver la animación
                     await this._sleep(this.pauseTime);
                 }
@@ -164,7 +167,9 @@ class Agent {
                 action = nextAction;
 
                 // Renderizar si el flag está activado
-                if (this.renderTraining) {
+                if (this.renderTraining && this.canvas) {
+                    // Renderizar el entorno en cada paso
+                    this.env.render(this.canvas);
                     await this._sleep(this.pauseTime);
                 }
             }

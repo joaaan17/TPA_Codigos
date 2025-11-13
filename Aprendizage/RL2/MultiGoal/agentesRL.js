@@ -1,12 +1,13 @@
 // Clase Agente para Reinforcement Learning Multi-Goal
 class AgentMultiGoal {
-    constructor(env, alpha = 0.1, gamma = 0.9, epsilon = 0.01, renderTraining = false, pauseTime = 100) {
+    constructor(env, alpha = 0.1, gamma = 0.9, epsilon = 0.01, renderTraining = false, pauseTime = 100, canvas = null) {
         this.env = env;
         this.alpha = alpha;           // Learning rate
         this.gamma = gamma;           // Discount factor
         this.epsilon = epsilon;       // Exploration rate
         this.renderTraining = renderTraining;
         this.pauseTime = pauseTime;
+        this.canvas = canvas;
         
         // Tabla Q (altura, ancho, 4 acciones)
         this.Q = this._createQTable(env.height, env.width, 4);
@@ -103,7 +104,8 @@ class AgentMultiGoal {
                 state = nextState;
                 nActions++;
 
-                if (this.renderTraining) {
+                if (this.renderTraining && this.canvas) {
+                    this.env.render(this.canvas);
                     await this._sleep(this.pauseTime);
                 }
             }
@@ -170,7 +172,8 @@ class AgentMultiGoal {
                 state = nextState;
                 action = nextAction;
 
-                if (this.renderTraining) {
+                if (this.renderTraining && this.canvas) {
+                    this.env.render(this.canvas);
                     await this._sleep(this.pauseTime);
                 }
             }

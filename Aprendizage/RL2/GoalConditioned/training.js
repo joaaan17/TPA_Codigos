@@ -138,7 +138,7 @@ async function startTraining() {
     const renderTraining = renderTrainingElement ? renderTrainingElement.checked : false;
 
     // Crear agente goal-conditioned
-    agent = new AgentGoalConditioned(env, alpha, gamma, epsilon, renderTraining, 10);
+    agent = new AgentGoalConditioned(env, alpha, gamma, epsilon, renderTraining, 10, canvas);
     
     addLog(`Agente Goal-Conditioned creado con α=${alpha}, γ=${gamma}, ε=${epsilon}`);
     addLog(`💡 El agente aprenderá a navegar a CUALQUIER objetivo`);

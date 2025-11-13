@@ -15,6 +15,8 @@ let n_alto_tela = 15;  // 15x15 = 225 partículas
 let densidad_tela = 0.1; // kg/m^2 Podría ser tela gruesa de algodón, 100g/m^2
 let sphere_size_tela;
 let stiffness = 0.98;  // Aumentado para tela más rígida
+let bending_stiffness = 0.1; // Rigidez de las restricciones de bending
+let use_bending = true; // Activar/desactivar restricciones de bending
 
 // ============================================
 // SETUP
@@ -32,6 +34,11 @@ function setup() {
                     n_ancho_tela,
                     stiffness,
                     sphere_size_tela);
+  
+  // AÑADIR RESTRICCIONES DE BENDING (opcional)
+  if (use_bending) {
+    add_bending_constraints(system, n_alto_tela, n_ancho_tela, bending_stiffness);
+  }
                     
   system.set_n_iters(5); // Podemos permitirnos más iteraciones ahora
 }
@@ -85,13 +92,16 @@ function draw() {
 function stats() {
   // Actualizar estadísticas en HTML (más eficiente que dibujar texto en WEBGL)
   let npart = system.particles.length;
+  let nconst = system.constraints.length;
   
   document.getElementById('fps').textContent = int(frameRate());
   document.getElementById('particles').textContent = npart;
+  document.getElementById('constraints').textContent = nconst;
   document.getElementById('wind').textContent = 
     '(' + vel_viento.x.toFixed(3) + ', ' + 
     vel_viento.y.toFixed(3) + ', ' + 
     vel_viento.z.toFixed(3) + ')';
+  document.getElementById('bending').textContent = use_bending ? 'ON' : 'OFF';
 }
 
 function display() {
@@ -132,9 +142,18 @@ function display() {
 // EVENTOS DE TECLADO
 // ============================================
 function keyPressed() {
-  // Tipo de fuegos
-  if (key === '1') {
-    console.log(key);
+  // Reiniciar simulación con/sin bending
+  if (key === 'B' || key === 'b') {
+    use_bending = !use_bending;
+    console.log("Bending constraints: " + (use_bending ? "ON" : "OFF"));
+    // Recrear la tela
+    system = crea_tela(alto_tela, ancho_tela, densidad_tela,
+                      n_alto_tela, n_ancho_tela, stiffness,
+                      sphere_size_tela);
+    if (use_bending) {
+      add_bending_constraints(system, n_alto_tela, n_ancho_tela, bending_stiffness);
+    }
+    system.set_n_iters(5);
   }
   
   // Viento - Eje Y (vertical)
