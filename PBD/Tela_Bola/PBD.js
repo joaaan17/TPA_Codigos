@@ -9,6 +9,8 @@ let vel_viento;
 
 // Variables para colisiones
 let groundPlane; // Plataforma (plano)
+let fallingSphere; // Esfera que cae sobre el cubo
+let sphere_drop_height = 1.5; // Altura desde donde cae la esfera (configurable)
 
 // Propiedades tela (optimizadas para rendimiento)
 let ancho_tela = 2.0;  // 2 metros de ancho
@@ -44,6 +46,26 @@ function setup() {
   }
                     
   system.set_n_iters(5); // Podemos permitirnos más iteraciones ahora
+  
+  // CONFIGURAR LISTENER DEL BOTÓN
+  setupButtonListeners();
+}
+
+// ============================================
+// CONFIGURAR EVENT LISTENERS
+// ============================================
+function setupButtonListeners() {
+  // Esperar a que el DOM esté listo
+  let dropButton = document.getElementById('dropButton');
+  if (dropButton) {
+    dropButton.addEventListener('click', function() {
+      console.log("🔴 CLICK DETECTADO en botón");
+      dropSphere();
+    });
+    console.log("✓ Listener del botón configurado");
+  } else {
+    console.log("⚠️ Botón dropButton no encontrado");
+  }
 }
 
 // ============================================
@@ -85,11 +107,14 @@ function createCubeMode() {
   system = new PBDSystem(0, 1.0);
   
   // GENERAR CUBO SOFT-BODY
-  let cube_center = createVector(0.0, 0.8, 0.0); // Centro del cubo (elevado sobre plataforma)
   let cube_size = 0.8; // Tamaño: 0.8 metros
   let cube_resolution = 3; // 3x3x3 = 27 partículas
   let cube_mass = 0.1; // Masa por partícula
   let cube_stiffness = 0.8; // Rigidez general
+  
+  // POSICIONAR CUBO CON LA BASE EN EL PLANO (Y = 0)
+  // Centro en Y = cube_size/2 para que la base esté en Y = 0
+  let cube_center = createVector(0.0, cube_size / 2, 0.0);
   
   console.log("========================================");
   console.log("🟥 GENERANDO CUBO DEFORMABLE");
@@ -113,14 +138,76 @@ function createCubeMode() {
     system.add_constraint(softCube.constraints[i]);
   }
   
+  // ANCLAR LA BASE DEL CUBO AL PLANO (usando AnchorConstraints)
+  // Esto es más estable que bloquear partículas directamente
+  let anchorsCount = 0;
+  let anchorStiffness = 1.0; // Muy rígido (casi infinito)
+  
+  for (let i = 0; i < cube_resolution; i++) {
+    for (let k = 0; k < cube_resolution; k++) {
+      // Índice de partículas en la capa inferior (j = 0)
+      let idx = i * cube_resolution * cube_resolution + 0 * cube_resolution + k;
+      let particle = system.particles[idx];
+      
+      // Crear ancla en la posición inicial de la partícula
+      let anchor_pos = particle.location.copy();
+      let anchor = new AnchorConstraint(particle, anchor_pos, anchorStiffness);
+      system.add_constraint(anchor);
+      anchorsCount++;
+    }
+  }
+  console.log(`🔒 ${anchorsCount} anclas creadas (base del cubo fijada al plano)`);
+  
   // CREAR PLATAFORMA (PLANO)
   let plane_point = createVector(0, 0, 0); // Punto en el plano (Y = 0)
   let plane_normal = createVector(0, 1, 0); // Normal hacia arriba
   groundPlane = new PlaneCollision(plane_point, plane_normal);
   system.add_collision_object(groundPlane);
   
-  console.log("🟥 MODO CUBO - Plataforma creada, listo para simular");
+  // CREAR ESFERA QUE CAE (dinámica)
+  let sphere_radius = 0.25; // 25 cm de radio (aumentado para mayor deformación)
+  let sphere_start_pos = createVector(0.0, sphere_drop_height, 0.0);
+  fallingSphere = new SphereCollision(sphere_start_pos, sphere_radius, true); // true = dinámica
+  system.add_collision_object(fallingSphere);
+  
+  console.log(`🟥 MODO CUBO - Posado y anclado al plano, esfera lista en altura ${sphere_drop_height}m`);
 }
+
+// ============================================
+// FUNCIÓN PARA SOLTAR LA BOLA
+// ============================================
+function dropSphere() {
+  console.log("🔴 Botón presionado - dropSphere() llamada");
+  
+  if (!fallingSphere) {
+    console.log("⚠️ ERROR: fallingSphere no existe");
+    return;
+  }
+  
+  console.log("✓ fallingSphere existe, isReleased =", fallingSphere.isReleased);
+  
+  // Leer altura del input HTML
+  let heightInput = document.getElementById('dropHeight');
+  if (heightInput) {
+    sphere_drop_height = parseFloat(heightInput.value) || 1.5;
+  }
+  
+  console.log(`📏 Altura configurada: ${sphere_drop_height}m`);
+  
+  // Reset posición a la altura especificada
+  let new_pos = createVector(0.0, sphere_drop_height, 0.0);
+  fallingSphere.reset(new_pos);
+  
+  console.log("📍 Posición reseteada a", new_pos);
+  
+  // SOLTAR la esfera (activa la física)
+  fallingSphere.release();
+  
+  console.log(`🔴 Esfera soltada - isReleased =`, fallingSphere.isReleased);
+}
+
+// Hacer la función accesible globalmente para onclick
+window.dropSphere = dropSphere;
 
 // Ajustar canvas cuando se redimensiona la ventana
 function windowResized() {
@@ -155,6 +242,11 @@ function draw() {
   
   // Control de cámara orbital (usa el mouse para rotar)
   orbitControl();
+  
+  // Actualizar esfera que cae (si existe y es dinámica)
+  if (fallingSphere && fallingSphere.isDynamic) {
+    fallingSphere.update(dt, createVector(0.0, -9.81, 0.0));
+  }
 
   system.apply_gravity(createVector(0.0, -9.81, 0.0)); // Gravedad más realista
   aplica_viento();
@@ -195,10 +287,15 @@ function display() {
   beginShape(LINES);
   for (let i = 0; i < nconst; i++) {
     let c = system.constraints[i];
-    let p1 = c.particles[0].location;
-    let p2 = c.particles[1].location;
-    vertex(scale_px * p1.x, -scale_px * p1.y, scale_px * p1.z);
-    vertex(scale_px * p2.x, -scale_px * p2.y, scale_px * p2.z);
+    
+    // Solo dibujar si la constraint tiene al menos 2 partículas
+    // (AnchorConstraint solo tiene 1, no se dibuja)
+    if (c.particles.length >= 2) {
+      let p1 = c.particles[0].location;
+      let p2 = c.particles[1].location;
+      vertex(scale_px * p1.x, -scale_px * p1.y, scale_px * p1.z);
+      vertex(scale_px * p2.x, -scale_px * p2.y, scale_px * p2.z);
+    }
   }
   endShape();
   
@@ -227,6 +324,13 @@ function display() {
 // EVENTOS DE TECLADO
 // ============================================
 function keyPressed() {
+  
+  // ===== SOLTAR BOLA CON TECLA ESPACIO (ALTERNATIVA) =====
+  if (key === ' ' || keyCode === 32) {
+    console.log("🔴 TECLA ESPACIO - Soltando bola");
+    dropSphere();
+    return;
+  }
   
   // ===== CAMBIAR MODO (TELA / CUBO) =====
   if (key === 'M' || key === 'm') {

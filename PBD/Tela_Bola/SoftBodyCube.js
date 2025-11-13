@@ -1,5 +1,6 @@
 // ============================================
 // GENERADOR DE CUBO DEFORMABLE (SOFT BODY CUBE)
+// VERSIÓN OPTIMIZADA - Solo constraints necesarias
 // ============================================
 
 /**
@@ -60,399 +61,178 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness) {
   }
   
   // ============================================
-  // 2. DISTANCE CONSTRAINTS (ESTRUCTURA)
+  // 2. STRETCH CONSTRAINTS (SOLO VECINOS DIRECTOS)
   // ============================================
   
-  let distanceCount = 0;
+  let stretchCount = 0;
   
-  // 2a. Aristas principales (edges) - conectar vecinos adyacentes
+  // SOLO conectar vecinos inmediatos en X, Y, Z
+  // NO diagonales de caras, NO diagonales volumétricas
   for (let i = 0; i < resolution; i++) {
     for (let j = 0; j < resolution; j++) {
       for (let k = 0; k < resolution; k++) {
         let idx = getIndex(i, j, k);
         let p1 = particles[idx];
         
-        // Conexión en eje X (i+1)
+        // Conexión en eje X (i+1) - solo vecino directo
         if (i < resolution - 1) {
           let idx2 = getIndex(i + 1, j, k);
           let p2 = particles[idx2];
           let dist = p5.Vector.dist(p1.location, p2.location);
           constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
+          stretchCount++;
         }
         
-        // Conexión en eje Y (j+1)
+        // Conexión en eje Y (j+1) - solo vecino directo
         if (j < resolution - 1) {
           let idx2 = getIndex(i, j + 1, k);
           let p2 = particles[idx2];
           let dist = p5.Vector.dist(p1.location, p2.location);
           constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
+          stretchCount++;
         }
         
-        // Conexión en eje Z (k+1)
+        // Conexión en eje Z (k+1) - solo vecino directo
         if (k < resolution - 1) {
           let idx2 = getIndex(i, j, k + 1);
           let p2 = particles[idx2];
           let dist = p5.Vector.dist(p1.location, p2.location);
           constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
+          stretchCount++;
         }
       }
     }
   }
   
-  // 2b. Diagonales de caras (face diagonals) - estabilidad 2D en cada cara
+  console.log(`✓ ${stretchCount} stretch constraints creadas (solo vecinos directos)`);
+  
+  // ============================================
+  // 3. SHEAR CONSTRAINTS (SOLO CARAS EXTERNAS, 2 DIAGONALES POR CUADRADO)
+  // ============================================
+  
+  let shearCount = 0;
+  let shearStiffness = stiffness * 0.2; // Shear más suave
+  
+  // Helper: añadir 2 diagonales por cuadrado
+  function addShearDiagonals(p00, p10, p01, p11) {
+    // Diagonal 1: esquina inferior-izquierda a superior-derecha
+    let d1 = p5.Vector.dist(p00.location, p11.location);
+    constraints.push(new DistanceConstraint(p00, p11, d1, shearStiffness));
+    
+    // Diagonal 2: esquina inferior-derecha a superior-izquierda
+    let d2 = p5.Vector.dist(p10.location, p01.location);
+    constraints.push(new DistanceConstraint(p10, p01, d2, shearStiffness));
+    
+    shearCount += 2;
+  }
+  
+  // SOLO añadir shear en las 6 CARAS EXTERNAS del cubo
+  
+  // Caras en plano XY (k = 0 y k = resolution-1)
+  for (let face_k of [0, resolution - 1]) {
+    for (let i = 0; i < resolution - 1; i++) {
+      for (let j = 0; j < resolution - 1; j++) {
+        let p00 = particles[getIndex(i, j, face_k)];
+        let p10 = particles[getIndex(i + 1, j, face_k)];
+        let p01 = particles[getIndex(i, j + 1, face_k)];
+        let p11 = particles[getIndex(i + 1, j + 1, face_k)];
+        addShearDiagonals(p00, p10, p01, p11);
+      }
+    }
+  }
+  
+  // Caras en plano XZ (j = 0 y j = resolution-1)
+  for (let face_j of [0, resolution - 1]) {
+    for (let i = 0; i < resolution - 1; i++) {
+      for (let k = 0; k < resolution - 1; k++) {
+        let p00 = particles[getIndex(i, face_j, k)];
+        let p10 = particles[getIndex(i + 1, face_j, k)];
+        let p01 = particles[getIndex(i, face_j, k + 1)];
+        let p11 = particles[getIndex(i + 1, face_j, k + 1)];
+        addShearDiagonals(p00, p10, p01, p11);
+      }
+    }
+  }
+  
+  // Caras en plano YZ (i = 0 y i = resolution-1)
+  for (let face_i of [0, resolution - 1]) {
+    for (let j = 0; j < resolution - 1; j++) {
+      for (let k = 0; k < resolution - 1; k++) {
+        let p00 = particles[getIndex(face_i, j, k)];
+        let p10 = particles[getIndex(face_i, j + 1, k)];
+        let p01 = particles[getIndex(face_i, j, k + 1)];
+        let p11 = particles[getIndex(face_i, j + 1, k + 1)];
+        addShearDiagonals(p00, p10, p01, p11);
+      }
+    }
+  }
+  
+  console.log(`✓ ${shearCount} shear constraints creadas (solo caras externas, 2 diagonales por cuadrado)`);
+  
+  // ============================================
+  // 4. BENDING CONSTRAINTS (SEPARACIÓN DE 2 UNIDADES)
+  // ============================================
+  
+  let bendingCount = 0;
+  let bendingStiffness = stiffness * 0.05; // Bending MUY suave
+  
+  // SOLO entre partículas separadas por 2 unidades en la rejilla
+  // Igual que la bending de la tela
   for (let i = 0; i < resolution; i++) {
     for (let j = 0; j < resolution; j++) {
       for (let k = 0; k < resolution; k++) {
         let idx = getIndex(i, j, k);
         let p1 = particles[idx];
         
-        // Diagonales en plano XY
-        if (i < resolution - 1 && j < resolution - 1) {
-          let idx2 = getIndex(i + 1, j + 1, k);
+        // Bending en dirección X: p(i,j,k) ↔ p(i+2,j,k)
+        if (i < resolution - 2) {
+          let idx2 = getIndex(i + 2, j, k);
           let p2 = particles[idx2];
           let dist = p5.Vector.dist(p1.location, p2.location);
-          constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
+          constraints.push(new DistanceConstraint(p1, p2, dist, bendingStiffness));
+          bendingCount++;
         }
         
-        if (i > 0 && j < resolution - 1) {
-          let idx2 = getIndex(i - 1, j + 1, k);
+        // Bending en dirección Y: p(i,j,k) ↔ p(i,j+2,k)
+        if (j < resolution - 2) {
+          let idx2 = getIndex(i, j + 2, k);
           let p2 = particles[idx2];
           let dist = p5.Vector.dist(p1.location, p2.location);
-          constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
+          constraints.push(new DistanceConstraint(p1, p2, dist, bendingStiffness));
+          bendingCount++;
         }
         
-        // Diagonales en plano XZ
-        if (i < resolution - 1 && k < resolution - 1) {
-          let idx2 = getIndex(i + 1, j, k + 1);
+        // Bending en dirección Z: p(i,j,k) ↔ p(i,j,k+2)
+        if (k < resolution - 2) {
+          let idx2 = getIndex(i, j, k + 2);
           let p2 = particles[idx2];
           let dist = p5.Vector.dist(p1.location, p2.location);
-          constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
-        }
-        
-        if (i > 0 && k < resolution - 1) {
-          let idx2 = getIndex(i - 1, j, k + 1);
-          let p2 = particles[idx2];
-          let dist = p5.Vector.dist(p1.location, p2.location);
-          constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
-        }
-        
-        // Diagonales en plano YZ
-        if (j < resolution - 1 && k < resolution - 1) {
-          let idx2 = getIndex(i, j + 1, k + 1);
-          let p2 = particles[idx2];
-          let dist = p5.Vector.dist(p1.location, p2.location);
-          constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
-        }
-        
-        if (j > 0 && k < resolution - 1) {
-          let idx2 = getIndex(i, j - 1, k + 1);
-          let p2 = particles[idx2];
-          let dist = p5.Vector.dist(p1.location, p2.location);
-          constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
+          constraints.push(new DistanceConstraint(p1, p2, dist, bendingStiffness));
+          bendingCount++;
         }
       }
     }
   }
   
-  // 2c. Diagonales volumétricas (body diagonals) - estabilidad 3D
-  for (let i = 0; i < resolution - 1; i++) {
-    for (let j = 0; j < resolution - 1; j++) {
-      for (let k = 0; k < resolution - 1; k++) {
-        let idx1 = getIndex(i, j, k);
-        let p1 = particles[idx1];
-        
-        // 4 diagonales del cubo unitario
-        let diagonals = [
-          getIndex(i + 1, j + 1, k + 1),
-          getIndex(i + 1, j + 1, k),
-          getIndex(i + 1, j, k + 1),
-          getIndex(i, j + 1, k + 1)
-        ];
-        
-        for (let diagIdx of diagonals) {
-          let p2 = particles[diagIdx];
-          let dist = p5.Vector.dist(p1.location, p2.location);
-          constraints.push(new DistanceConstraint(p1, p2, dist, stiffness));
-          distanceCount++;
-        }
-        
-        // Diagonal opuesta
-        let idx2 = getIndex(i, j, k + 1);
-        let idx3 = getIndex(i + 1, j + 1, k);
-        let p2 = particles[idx2];
-        let p3 = particles[idx3];
-        let dist2 = p5.Vector.dist(p2.location, p3.location);
-        constraints.push(new DistanceConstraint(p2, p3, dist2, stiffness));
-        distanceCount++;
-        
-        idx2 = getIndex(i, j + 1, k);
-        idx3 = getIndex(i + 1, j, k + 1);
-        p2 = particles[idx2];
-        p3 = particles[idx3];
-        dist2 = p5.Vector.dist(p2.location, p3.location);
-        constraints.push(new DistanceConstraint(p2, p3, dist2, stiffness));
-        distanceCount++;
-      }
-    }
-  }
-  
-  console.log(`✓ ${distanceCount} distance constraints creadas`);
-  
-  // ============================================
-  // 3. BENDING CONSTRAINTS
-  // ============================================
-  
-  let bendingCount = 0;
-  let bendingStiffness = stiffness * 0.3; // Bending más suave
-  
-  // Función auxiliar para calcular ángulo diedro inicial
-  function calcular_phi0(p1, p2, p3, p4) {
-    let e1 = p5.Vector.sub(p2.location, p1.location);
-    let e2 = p5.Vector.sub(p3.location, p1.location);
-    let e3 = p5.Vector.sub(p4.location, p1.location);
-    
-    let n1 = p5.Vector.cross(e1, e2);
-    let n2 = p5.Vector.cross(e1, e3);
-    
-    let len_n1 = n1.mag();
-    let len_n2 = n2.mag();
-    
-    if (len_n1 < 0.0001 || len_n2 < 0.0001) {
-      return 0; // Ángulo plano por defecto
-    }
-    
-    n1.normalize();
-    n2.normalize();
-    
-    let d = n1.dot(n2);
-    d = constrain(d, -1.0, 1.0);
-    
-    return acos(d);
-  }
-  
-  // Bending en caras paralelas al plano XY (aristas en Z)
-  for (let i = 0; i < resolution - 1; i++) {
-    for (let j = 0; j < resolution - 1; j++) {
-      for (let k = 0; k < resolution; k++) {
-        let idx1 = getIndex(i, j, k);
-        let idx2 = getIndex(i + 1, j, k);
-        let idx3 = getIndex(i, j + 1, k);
-        let idx4 = getIndex(i + 1, j + 1, k);
-        
-        let p1 = particles[idx1];
-        let p2 = particles[idx2];
-        let p3 = particles[idx3];
-        let p4 = particles[idx4];
-        
-        let phi0 = calcular_phi0(p1, p2, p3, p4);
-        constraints.push(new BendingConstraint(p1, p2, p3, p4, phi0, bendingStiffness));
-        bendingCount++;
-      }
-    }
-  }
-  
-  // Bending en caras paralelas al plano XZ (aristas en Y)
-  for (let i = 0; i < resolution - 1; i++) {
-    for (let j = 0; j < resolution; j++) {
-      for (let k = 0; k < resolution - 1; k++) {
-        let idx1 = getIndex(i, j, k);
-        let idx2 = getIndex(i + 1, j, k);
-        let idx3 = getIndex(i, j, k + 1);
-        let idx4 = getIndex(i + 1, j, k + 1);
-        
-        let p1 = particles[idx1];
-        let p2 = particles[idx2];
-        let p3 = particles[idx3];
-        let p4 = particles[idx4];
-        
-        let phi0 = calcular_phi0(p1, p2, p3, p4);
-        constraints.push(new BendingConstraint(p1, p2, p3, p4, phi0, bendingStiffness));
-        bendingCount++;
-      }
-    }
-  }
-  
-  // Bending en caras paralelas al plano YZ (aristas en X)
-  for (let i = 0; i < resolution; i++) {
-    for (let j = 0; j < resolution - 1; j++) {
-      for (let k = 0; k < resolution - 1; k++) {
-        let idx1 = getIndex(i, j, k);
-        let idx2 = getIndex(i, j + 1, k);
-        let idx3 = getIndex(i, j, k + 1);
-        let idx4 = getIndex(i, j + 1, k + 1);
-        
-        let p1 = particles[idx1];
-        let p2 = particles[idx2];
-        let p3 = particles[idx3];
-        let p4 = particles[idx4];
-        
-        let phi0 = calcular_phi0(p1, p2, p3, p4);
-        constraints.push(new BendingConstraint(p1, p2, p3, p4, phi0, bendingStiffness));
-        bendingCount++;
-      }
-    }
-  }
-  
-  console.log(`✓ ${bendingCount} bending constraints creadas`);
-  
-  // ============================================
-  // 4. SHEAR CONSTRAINTS
-  // ============================================
-  
-  let shearCount = 0;
-  let shearStiffness = stiffness * 0.3; // Shear más suave
-  
-  // Función auxiliar para calcular ángulo inicial
-  function calcular_psi0(p0, p1, p2) {
-    let v1 = p5.Vector.sub(p1.location, p0.location);
-    let v2 = p5.Vector.sub(p2.location, p0.location);
-    
-    let len_v1 = v1.mag();
-    let len_v2 = v2.mag();
-    
-    if (len_v1 < 0.0001 || len_v2 < 0.0001) {
-      return HALF_PI; // 90° por defecto
-    }
-    
-    v1.normalize();
-    v2.normalize();
-    
-    let c = v1.dot(v2);
-    c = constrain(c, -1.0, 1.0);
-    
-    return acos(c);
-  }
-  
-  // Shear en caras paralelas al plano XY
-  for (let i = 0; i < resolution - 1; i++) {
-    for (let j = 0; j < resolution - 1; j++) {
-      for (let k = 0; k < resolution; k++) {
-        let idx00 = getIndex(i, j, k);
-        let idx10 = getIndex(i + 1, j, k);
-        let idx01 = getIndex(i, j + 1, k);
-        let idx11 = getIndex(i + 1, j + 1, k);
-        
-        let p00 = particles[idx00];
-        let p10 = particles[idx10];
-        let p01 = particles[idx01];
-        let p11 = particles[idx11];
-        
-        // 4 ángulos del cuadrado
-        let psi0_00 = calcular_psi0(p00, p10, p01);
-        constraints.push(new ShearConstraint(p00, p10, p01, psi0_00, shearStiffness));
-        shearCount++;
-        
-        let psi0_10 = calcular_psi0(p10, p00, p11);
-        constraints.push(new ShearConstraint(p10, p00, p11, psi0_10, shearStiffness));
-        shearCount++;
-        
-        let psi0_01 = calcular_psi0(p01, p00, p11);
-        constraints.push(new ShearConstraint(p01, p00, p11, psi0_01, shearStiffness));
-        shearCount++;
-        
-        let psi0_11 = calcular_psi0(p11, p10, p01);
-        constraints.push(new ShearConstraint(p11, p10, p01, psi0_11, shearStiffness));
-        shearCount++;
-      }
-    }
-  }
-  
-  // Shear en caras paralelas al plano XZ
-  for (let i = 0; i < resolution - 1; i++) {
-    for (let j = 0; j < resolution; j++) {
-      for (let k = 0; k < resolution - 1; k++) {
-        let idx00 = getIndex(i, j, k);
-        let idx10 = getIndex(i + 1, j, k);
-        let idx01 = getIndex(i, j, k + 1);
-        let idx11 = getIndex(i + 1, j, k + 1);
-        
-        let p00 = particles[idx00];
-        let p10 = particles[idx10];
-        let p01 = particles[idx01];
-        let p11 = particles[idx11];
-        
-        // 4 ángulos del cuadrado
-        let psi0_00 = calcular_psi0(p00, p10, p01);
-        constraints.push(new ShearConstraint(p00, p10, p01, psi0_00, shearStiffness));
-        shearCount++;
-        
-        let psi0_10 = calcular_psi0(p10, p00, p11);
-        constraints.push(new ShearConstraint(p10, p00, p11, psi0_10, shearStiffness));
-        shearCount++;
-        
-        let psi0_01 = calcular_psi0(p01, p00, p11);
-        constraints.push(new ShearConstraint(p01, p00, p11, psi0_01, shearStiffness));
-        shearCount++;
-        
-        let psi0_11 = calcular_psi0(p11, p10, p01);
-        constraints.push(new ShearConstraint(p11, p10, p01, psi0_11, shearStiffness));
-        shearCount++;
-      }
-    }
-  }
-  
-  // Shear en caras paralelas al plano YZ
-  for (let i = 0; i < resolution; i++) {
-    for (let j = 0; j < resolution - 1; j++) {
-      for (let k = 0; k < resolution - 1; k++) {
-        let idx00 = getIndex(i, j, k);
-        let idx10 = getIndex(i, j + 1, k);
-        let idx01 = getIndex(i, j, k + 1);
-        let idx11 = getIndex(i, j + 1, k + 1);
-        
-        let p00 = particles[idx00];
-        let p10 = particles[idx10];
-        let p01 = particles[idx01];
-        let p11 = particles[idx11];
-        
-        // 4 ángulos del cuadrado
-        let psi0_00 = calcular_psi0(p00, p10, p01);
-        constraints.push(new ShearConstraint(p00, p10, p01, psi0_00, shearStiffness));
-        shearCount++;
-        
-        let psi0_10 = calcular_psi0(p10, p00, p11);
-        constraints.push(new ShearConstraint(p10, p00, p11, psi0_10, shearStiffness));
-        shearCount++;
-        
-        let psi0_01 = calcular_psi0(p01, p00, p11);
-        constraints.push(new ShearConstraint(p01, p00, p11, psi0_01, shearStiffness));
-        shearCount++;
-        
-        let psi0_11 = calcular_psi0(p11, p10, p01);
-        constraints.push(new ShearConstraint(p11, p10, p01, psi0_11, shearStiffness));
-        shearCount++;
-      }
-    }
-  }
-  
-  console.log(`✓ ${shearCount} shear constraints creadas`);
+  console.log(`✓ ${bendingCount} bending constraints creadas (separación de 2 unidades)`);
   
   // ============================================
   // RESUMEN Y RETORNO
   // ============================================
   
-  let totalConstraints = distanceCount + bendingCount + shearCount;
+  let totalConstraints = stretchCount + shearCount + bendingCount;
   console.log(`========================================`);
-  console.log(`CUBO SOFT-BODY GENERADO EXITOSAMENTE`);
+  console.log(`CUBO SOFT-BODY GENERADO (OPTIMIZADO)`);
   console.log(`Partículas: ${particles.length}`);
   console.log(`Constraints totales: ${totalConstraints}`);
-  console.log(`  - Distance: ${distanceCount}`);
-  console.log(`  - Bending: ${bendingCount}`);
-  console.log(`  - Shear: ${shearCount}`);
+  console.log(`  - Stretch (vecinos directos): ${stretchCount}`);
+  console.log(`  - Shear (caras externas, 2 diag): ${shearCount}`);
+  console.log(`  - Bending (separación 2): ${bendingCount}`);
   console.log(`========================================`);
   
   return {
     particles: particles,
-    constraints: constraints
+    constraints: constraints,
+    resolution: resolution  // Retornar también la resolución
   };
 }
-

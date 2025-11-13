@@ -386,10 +386,47 @@ class ShearConstraint extends Constraint {
 // CLASE SPHERECOLLISION (Colisión con esfera)
 // ============================================
 class SphereCollision {
-  constructor(center, radius) {
+  constructor(center, radius, isDynamic = false) {
     this.center = center.copy(); // p5.Vector - centro de la esfera
     this.radius = radius; // number - radio de la esfera
     this.epsilon = 0.0001; // Para evitar divisiones por cero
+    
+    // Si es dinámica, tiene velocidad y responde a gravedad
+    this.isDynamic = isDynamic;
+    this.velocity = createVector(0, 0, 0);
+    this.mass = 1.0; // Masa de la esfera (1 kg)
+    this.isReleased = false; // Controla si la esfera ha sido soltada
+  }
+  
+  // Actualizar física si es dinámica Y ha sido soltada
+  update(dt, gravity) {
+    if (!this.isDynamic || !this.isReleased) return;
+    
+    // Aplicar gravedad
+    this.velocity.add(p5.Vector.mult(gravity, dt));
+    
+    // Actualizar posición
+    this.center.add(p5.Vector.mult(this.velocity, dt));
+    
+    // Colisión simple con el plano (Y = 0)
+    if (this.center.y - this.radius < 0) {
+      this.center.y = this.radius; // Poner justo sobre el plano
+      this.velocity.y *= -0.5; // Rebote con pérdida de energía
+      this.velocity.mult(0.95); // Fricción al rebotar
+    }
+  }
+  
+  // Soltar la esfera (activa la física)
+  release() {
+    this.isReleased = true;
+    this.velocity = createVector(0, 0, 0); // Empieza desde reposo
+  }
+  
+  // Reset posición y velocidad (vuelve a estar suspendida)
+  reset(newPosition) {
+    this.center = newPosition.copy();
+    this.velocity = createVector(0, 0, 0);
+    this.isReleased = false; // Vuelve a estar suspendida
   }
   
   /**
@@ -448,11 +485,58 @@ class SphereCollision {
               -scale_px * this.center.y, 
               scale_px * this.center.z);
     
-    // Esfera semitransparente para visualizar colisiones
-    fill(255, 100, 100); // Rojo semitransparente
+    // Color diferente si es dinámica (naranja) o estática (roja)
+    if (this.isDynamic) {
+      fill(255, 150, 50, 200); // Naranja semitransparente
+    } else {
+      fill(255, 100, 100, 150); // Rojo semitransparente
+    }
     noStroke();
     sphere(scale_px * this.radius, 16, 16);
     pop();
+  }
+}
+
+// ============================================
+// CLASE ANCHORCONSTRAINT (Ancla partícula a posición fija)
+// ============================================
+class AnchorConstraint extends Constraint {
+  constructor(particle, anchor_pos, k) {
+    super();
+    this.particles.push(particle);
+    this.anchor = anchor_pos.copy(); // Posición fija donde anclar
+    this.stiffness = k;
+    this.k_coef = k;
+    this.C = 0;
+  }
+  
+  proyecta_restriccion() {
+    let part = this.particles[0];
+    
+    // Vector de diferencia entre partícula y ancla
+    let vd = p5.Vector.sub(part.location, this.anchor);
+    let dist_actual = vd.mag();
+    
+    // Si está muy cerca, no hace falta corregir
+    if (dist_actual < 0.0001) return;
+    
+    // Calcular constraint: C = |p - anchor|
+    this.C = dist_actual;
+    
+    // Normalizar el vector
+    let n = vd.normalize();
+    
+    // Corrección: mover la partícula hacia el ancla
+    // Como el ancla es infinitamente pesada, solo movemos la partícula
+    let correction = p5.Vector.mult(n, -this.k_coef * this.C);
+    
+    if (!part.bloqueada) {
+      part.location.add(correction);
+    }
+  }
+  
+  display(scale_px) {
+    // No dibujar (o dibujar una pequeña marca en el ancla)
   }
 }
 
@@ -497,8 +581,11 @@ class PlaneCollision {
       // Corrección: Δp = -dist * normal (dist es negativo, -dist es positivo)
       let correction = p5.Vector.mult(this.normal, -dist);
       
-      // 5. Aplicar corrección
+      // 5. Aplicar corrección de posición
       part.location.add(correction);
+      
+      // 6. MARCAR que esta partícula colisionó (para aplicar fricción después)
+      part.collidedWithPlane = true;
     }
   }
   

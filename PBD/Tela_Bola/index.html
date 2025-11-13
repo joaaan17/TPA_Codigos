@@ -33,6 +33,16 @@
             z-index: 1000;
             pointer-events: none;
         }
+        
+        /* Permitir interacción en el panel de la esfera */
+        #sphere-controls {
+            pointer-events: auto !important;
+        }
+        
+        #sphere-controls input,
+        #sphere-controls button {
+            pointer-events: auto !important;
+        }
         #stats .label {
             color: #88ff88;
             font-weight: bold;
@@ -53,8 +63,25 @@
         <div><span class="label">Bending:</span> <span id="bending" class="value">ON</span></div>
         <div><span class="label">Shear:</span> <span id="shear" class="value">ON</span></div>
         <div><span class="label">Viento:</span> <span id="wind" class="value">(0.000, 0.000, 0.000)</span></div>
+        
+        <!-- Control de esfera que cae -->
+        <div id="sphere-controls" style="margin-top: 15px; padding: 10px; background-color: rgba(255, 100, 100, 0.2); border-radius: 5px; pointer-events: auto;">
+            <div style="color: #ffaaaa; font-weight: bold; margin-bottom: 5px;">🔴 ESFERA QUE CAE:</div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                <label for="dropHeight" style="color: #ffffff;">Altura (m):</label>
+                <input type="number" id="dropHeight" value="1.5" min="0.5" max="3.0" step="0.1" 
+                       style="width: 60px; padding: 3px; background-color: #333; color: white; border: 1px solid #666; border-radius: 3px; pointer-events: auto;">
+            </div>
+            <button id="dropButton" 
+                    style="width: 100%; padding: 6px; background-color: #ff6666; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; pointer-events: auto;">
+                SOLTAR BOLA
+            </button>
+        </div>
+        
         <div style="margin-top: 10px; color: #ffdd88;"><strong>CONTROLES:</strong></div>
-        <div style="color: #ff88ff;"><strong>🎮 Modo:</strong></div>
+        <div style="color: #ffaaaa;"><strong>🔴 Soltar Bola:</strong></div>
+        <div>ESPACIO - Soltar (alternativa)</div>
+        <div style="margin-top: 5px; color: #ff88ff;"><strong>🎮 Modo:</strong></div>
         <div>M - Cambiar Tela/Cubo</div>
         <div style="margin-top: 5px; color: #aaaaff;"><strong>Restricciones:</strong></div>
         <div>B - Toggle Bending</div>

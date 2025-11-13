@@ -14,6 +14,9 @@ class Particle {
     
     this.bloqueada = false;
     this.display_size = 0.1;
+    
+    // Flag para detección de colisión con plano (se resetea cada frame)
+    this.collidedWithPlane = false;
   }
 
   set_bloqueada(bl) {
@@ -23,7 +26,12 @@ class Particle {
   }
 
   update_pbd_vel(dt) {
+    // Calcular velocidad basada en el cambio de posición
+    // v = (p_new - p_old) / dt
     this.velocity = p5.Vector.sub(this.location, this.last_location).div(dt);
+    
+    // NOTA: El damping global de Müller se aplica DESPUÉS, en PBDSystem
+    // No se debe aplicar damping simple aquí
   }
 
   // Method to update location
