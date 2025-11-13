@@ -166,4 +166,101 @@ function add_bending_constraints(tela, n_alto, n_ancho, stiffness) {
   console.log("Añadidas " + num_bending + " restricciones de bending.");
 }
 
+// ============================================
+// FUNCIÓN AÑADIR RESTRICCIONES DE SHEAR (CIZALLA)
+// ============================================
+/**
+ * Añade restricciones de shear (cizalla) a una tela existente.
+ * Crea restricciones que mantienen constantes los ángulos internos de los triángulos
+ * formados por la malla, previniendo la deformación por cizalla.
+ * 
+ * @param {PBDSystem} tela - El sistema PBD con la tela
+ * @param {number} n_alto - Número de partículas en dirección Y
+ * @param {number} n_ancho - Número de partículas en dirección X
+ * @param {number} stiffness - Rigidez de las restricciones de shear (0-1)
+ */
+function add_shear_constraints(tela, n_alto, n_ancho, stiffness) {
+  let num_shear = 0;
+  
+  // Función auxiliar para obtener el índice lineal de una partícula (i, j)
+  function getIndex(i, j) {
+    return i * n_alto + j;
+  }
+  
+  // Función auxiliar para calcular el ángulo inicial en un vértice
+  function calcular_psi0(p0, p1, p2) {
+    // v1 = p1 - p0
+    // v2 = p2 - p0
+    let v1 = p5.Vector.sub(p1.location, p0.location);
+    let v2 = p5.Vector.sub(p2.location, p0.location);
+    
+    let len_v1 = v1.mag();
+    let len_v2 = v2.mag();
+    
+    // Evitar vectores degenerados
+    if (len_v1 < 0.0001 || len_v2 < 0.0001) {
+      return HALF_PI; // Ángulo de 90° por defecto
+    }
+    
+    v1.normalize();
+    v2.normalize();
+    
+    let c = v1.dot(v2);
+    c = constrain(c, -1.0, 1.0);
+    
+    return acos(c);
+  }
+  
+  // CREAR RESTRICCIONES DE SHEAR PARA CADA CUADRILÁTERO DE LA MALLA
+  // Para cada cuadrilátero formado por 4 partículas adyacentes, creamos
+  // 4 restricciones de shear (una por cada ángulo interno)
+  
+  for (let i = 0; i < n_ancho - 1; i++) {
+    for (let j = 0; j < n_alto - 1; j++) {
+      // Obtener los 4 vértices del cuadrilátero:
+      //  p01 -- p11
+      //   |      |
+      //  p00 -- p10
+      
+      let idx00 = getIndex(i, j);
+      let idx10 = getIndex(i + 1, j);
+      let idx01 = getIndex(i, j + 1);
+      let idx11 = getIndex(i + 1, j + 1);
+      
+      let p00 = tela.particles[idx00];
+      let p10 = tela.particles[idx10];
+      let p01 = tela.particles[idx01];
+      let p11 = tela.particles[idx11];
+      
+      // TRIÁNGULO INFERIOR: (p00, p10, p01)
+      // Restricción en ángulo de p00
+      let psi0_p00_tri1 = calcular_psi0(p00, p10, p01);
+      let sc1 = new ShearConstraint(p00, p10, p01, psi0_p00_tri1, stiffness);
+      tela.add_constraint(sc1);
+      num_shear++;
+      
+      // Restricción en ángulo de p10
+      let psi0_p10_tri1 = calcular_psi0(p10, p00, p11);
+      let sc2 = new ShearConstraint(p10, p00, p11, psi0_p10_tri1, stiffness);
+      tela.add_constraint(sc2);
+      num_shear++;
+      
+      // Restricción en ángulo de p01
+      let psi0_p01_tri1 = calcular_psi0(p01, p00, p11);
+      let sc3 = new ShearConstraint(p01, p00, p11, psi0_p01_tri1, stiffness);
+      tela.add_constraint(sc3);
+      num_shear++;
+      
+      // TRIÁNGULO SUPERIOR: (p10, p11, p01)
+      // Restricción en ángulo de p11
+      let psi0_p11_tri2 = calcular_psi0(p11, p10, p01);
+      let sc4 = new ShearConstraint(p11, p10, p01, psi0_p11_tri2, stiffness);
+      tela.add_constraint(sc4);
+      num_shear++;
+    }
+  }
+  
+  console.log("Añadidas " + num_shear + " restricciones de shear.");
+}
+
 

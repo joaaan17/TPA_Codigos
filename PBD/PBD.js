@@ -16,7 +16,9 @@ let densidad_tela = 0.1; // kg/m^2 Podría ser tela gruesa de algodón, 100g/m^2
 let sphere_size_tela;
 let stiffness = 0.98;  // Aumentado para tela más rígida
 let bending_stiffness = 0.1; // Rigidez de las restricciones de bending
+let shear_stiffness = 0.1; // Rigidez de las restricciones de shear
 let use_bending = true; // Activar/desactivar restricciones de bending
+let use_shear = true; // Activar/desactivar restricciones de shear
 
 // ============================================
 // SETUP
@@ -38,6 +40,11 @@ function setup() {
   // AÑADIR RESTRICCIONES DE BENDING (opcional)
   if (use_bending) {
     add_bending_constraints(system, n_alto_tela, n_ancho_tela, bending_stiffness);
+  }
+  
+  // AÑADIR RESTRICCIONES DE SHEAR (opcional)
+  if (use_shear) {
+    add_shear_constraints(system, n_alto_tela, n_ancho_tela, shear_stiffness);
   }
                     
   system.set_n_iters(5); // Podemos permitirnos más iteraciones ahora
@@ -102,6 +109,7 @@ function stats() {
     vel_viento.y.toFixed(3) + ', ' + 
     vel_viento.z.toFixed(3) + ')';
   document.getElementById('bending').textContent = use_bending ? 'ON' : 'OFF';
+  document.getElementById('shear').textContent = use_shear ? 'ON' : 'OFF';
 }
 
 function display() {
@@ -146,14 +154,14 @@ function keyPressed() {
   if (key === 'B' || key === 'b') {
     use_bending = !use_bending;
     console.log("Bending constraints: " + (use_bending ? "ON" : "OFF"));
-    // Recrear la tela
-    system = crea_tela(alto_tela, ancho_tela, densidad_tela,
-                      n_alto_tela, n_ancho_tela, stiffness,
-                      sphere_size_tela);
-    if (use_bending) {
-      add_bending_constraints(system, n_alto_tela, n_ancho_tela, bending_stiffness);
-    }
-    system.set_n_iters(5);
+    recrearTela();
+  }
+  
+  // Reiniciar simulación con/sin shear
+  if (key === 'H' || key === 'h') {
+    use_shear = !use_shear;
+    console.log("Shear constraints: " + (use_shear ? "ON" : "OFF"));
+    recrearTela();
   }
   
   // Viento - Eje Y (vertical)
@@ -180,5 +188,25 @@ function keyPressed() {
 
 function mousePressed() {
   // Puede agregar funcionalidad aquí si lo desea
+}
+
+// ============================================
+// FUNCIÓN AUXILIAR PARA RECREAR LA TELA
+// ============================================
+function recrearTela() {
+  // Recrear la tela
+  system = crea_tela(alto_tela, ancho_tela, densidad_tela,
+                    n_alto_tela, n_ancho_tela, stiffness,
+                    sphere_size_tela);
+  
+  // Añadir restricciones opcionales
+  if (use_bending) {
+    add_bending_constraints(system, n_alto_tela, n_ancho_tela, bending_stiffness);
+  }
+  if (use_shear) {
+    add_shear_constraints(system, n_alto_tela, n_ancho_tela, shear_stiffness);
+  }
+  
+  system.set_n_iters(5);
 }
 

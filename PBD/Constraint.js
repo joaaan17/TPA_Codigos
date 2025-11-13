@@ -249,3 +249,136 @@ class BendingConstraint extends Constraint {
   }
 }
 
+// ============================================
+// CLASE SHEARCONSTRAINT (Angular)
+// ============================================
+class ShearConstraint extends Constraint {
+  constructor(p0, p1, p2, psi0, k) {
+    super();
+    this.particles.push(p0); // x0 - vértice donde se mide el ángulo
+    this.particles.push(p1); // x1 - primer punto del ángulo
+    this.particles.push(p2); // x2 - segundo punto del ángulo
+    this.psi0 = psi0; // Ángulo inicial
+    this.stiffness = k;
+    this.k_coef = k;
+    this.C = 0;
+    this.epsilon = 0.0001; // Para evitar divisiones por cero
+  }
+  
+  proyecta_restriccion() {
+    let part0 = this.particles[0]; // x0
+    let part1 = this.particles[1]; // x1
+    let part2 = this.particles[2]; // x2
+    
+    // 1. Leer posiciones x0, x1, x2
+    let x0 = part0.location;
+    let x1 = part1.location;
+    let x2 = part2.location;
+    
+    // 2. Calcular v1 y v2
+    // v1 = x1 - x0
+    // v2 = x2 - x0
+    let v1 = p5.Vector.sub(x1, x0);
+    let v2 = p5.Vector.sub(x2, x0);
+    
+    let len_v1 = v1.mag();
+    let len_v2 = v2.mag();
+    
+    // Validación: evitar vectores degenerados
+    if (len_v1 < this.epsilon || len_v2 < this.epsilon) {
+      return; // Vectores degenerados, salir sin aplicar corrección
+    }
+    
+    // Normalizar v1 y v2
+    v1.normalize();
+    v2.normalize();
+    
+    // 3. Calcular c = dot(v1, v2) con clamp
+    let c = v1.dot(v2);
+    c = constrain(c, -1.0, 1.0);
+    
+    // 4. Calcular C = acos(c) - psi0
+    this.C = acos(c) - this.psi0;
+    
+    // 5. Si C ≈ 0, salir
+    if (abs(this.C) < this.epsilon) {
+      return;
+    }
+    
+    // Validación: evitar NaN en sqrt(1 - c²)
+    let c2 = c * c;
+    let sqrt_term = sqrt(1.0 - c2);
+    if (sqrt_term < this.epsilon) {
+      return; // Evitar división por cero
+    }
+    
+    // 6. Calcular gradientes ∇x0, ∇x1, ∇x2
+    // Fórmulas exactas según las diapositivas:
+    // ∇x1 C = -(1 / sqrt(1 - c²)) * ((I - v1v1^T) / |x1 - x0|) * v2
+    // ∇x2 C = -(1 / sqrt(1 - c²)) * ((I - v2v2^T) / |x2 - x0|) * v1
+    // ∇x0 C = -∇x1 C - ∇x2 C
+    
+    let factor = -1.0 / sqrt_term;
+    
+    // Para ∇x1 C: necesitamos calcular (I - v1v1^T) * v2
+    // (I - v1v1^T) * v2 = v2 - v1 * (v1 · v2) = v2 - v1 * c
+    let grad_x1_unnorm = p5.Vector.sub(v2, p5.Vector.mult(v1, c));
+    let grad_x1 = p5.Vector.mult(grad_x1_unnorm, factor / len_v1);
+    
+    // Para ∇x2 C: necesitamos calcular (I - v2v2^T) * v1
+    // (I - v2v2^T) * v1 = v1 - v2 * (v2 · v1) = v1 - v2 * c
+    let grad_x2_unnorm = p5.Vector.sub(v1, p5.Vector.mult(v2, c));
+    let grad_x2 = p5.Vector.mult(grad_x2_unnorm, factor / len_v2);
+    
+    // ∇x0 C = -∇x1 C - ∇x2 C
+    let grad_x0 = p5.Vector.sub(createVector(0, 0, 0), grad_x1);
+    grad_x0.sub(grad_x2);
+    
+    // 7. Calcular |∇C|² = |∇x0 C|² + |∇x1 C|² + |∇x2 C|²
+    let grad_norm_sq = grad_x0.magSq() + grad_x1.magSq() + grad_x2.magSq();
+    
+    // Validación: evitar división por cero
+    if (grad_norm_sq < this.epsilon) {
+      return;
+    }
+    
+    // 8. Calcular masas inversas y sum_w
+    let w0 = part0.w;
+    let w1 = part1.w;
+    let w2 = part2.w;
+    let sum_w = w0 + w1 + w2;
+    
+    // Validación: si todas las partículas están fijas
+    if (sum_w < this.epsilon) {
+      return;
+    }
+    
+    // 9. Aplicar fórmula PBD para Δp0, Δp1, Δp2
+    // Δpi = -(wi / sum_w) * (C / |∇C|²) * ∇pi C
+    let lambda = -this.C / grad_norm_sq;
+    
+    // Aplicar rigidez k' (ajustada por el solver)
+    lambda *= this.k_coef;
+    
+    // 10. Calcular y aplicar correcciones
+    if (!part0.bloqueada) {
+      let delta_p0 = p5.Vector.mult(grad_x0, (w0 / sum_w) * lambda);
+      part0.location.add(delta_p0);
+    }
+    
+    if (!part1.bloqueada) {
+      let delta_p1 = p5.Vector.mult(grad_x1, (w1 / sum_w) * lambda);
+      part1.location.add(delta_p1);
+    }
+    
+    if (!part2.bloqueada) {
+      let delta_p2 = p5.Vector.mult(grad_x2, (w2 / sum_w) * lambda);
+      part2.location.add(delta_p2);
+    }
+  }
+  
+  display(scale_px) {
+    // YA NO SE USA - El rendering se hace en PBD.js
+  }
+}
+
