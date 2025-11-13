@@ -382,3 +382,77 @@ class ShearConstraint extends Constraint {
   }
 }
 
+// ============================================
+// CLASE SPHERECOLLISION (Colisión con esfera)
+// ============================================
+class SphereCollision {
+  constructor(center, radius) {
+    this.center = center.copy(); // p5.Vector - centro de la esfera
+    this.radius = radius; // number - radio de la esfera
+    this.epsilon = 0.0001; // Para evitar divisiones por cero
+  }
+  
+  /**
+   * Proyecta las partículas que penetran la esfera hacia afuera
+   * Esta es una restricción de DESIGUALDAD: solo se aplica si C < 0
+   * 
+   * @param {Array} particles - Array de partículas del sistema
+   */
+  project(particles) {
+    for (let i = 0; i < particles.length; i++) {
+      let part = particles[i];
+      
+      // Saltar partículas bloqueadas (no se pueden mover)
+      if (part.bloqueada) continue;
+      
+      // 1. Obtener posición predicha de la partícula
+      let p = part.location;
+      
+      // 2. Calcular dirección y distancia desde el centro de la esfera
+      let dir = p5.Vector.sub(p, this.center);
+      let dist = dir.mag();
+      
+      // 3. Evaluar colisión: dist < radius → hay penetración
+      if (dist >= this.radius) {
+        continue; // No hay colisión, pasar a la siguiente partícula
+      }
+      
+      // 4. HAY COLISIÓN - Calcular vector normal
+      // Proteger contra el caso raro dist == 0 (partícula exactamente en el centro)
+      let n;
+      if (dist < this.epsilon) {
+        // Usar un vector fijo para evitar NaN
+        n = createVector(0, 1, 0); // Empujar hacia arriba por defecto
+      } else {
+        n = dir.normalize();
+      }
+      
+      // 5. Calcular C(p) = dist - radius (será negativo porque hay penetración)
+      let C = dist - this.radius;
+      
+      // 6. Aplicar corrección PBD
+      // Para un constraint con un solo punto: Δp = -C * n
+      // Como C < 0 (penetración), -C > 0, empuja hacia afuera
+      // Equivalente a: Δp = (radius - dist) * n
+      let correction = p5.Vector.mult(n, -C);
+      
+      // 7. Actualizar posición de la partícula
+      part.location.add(correction);
+    }
+  }
+  
+  display(scale_px) {
+    // Dibujar la esfera de colisión
+    push();
+    translate(scale_px * this.center.x, 
+              -scale_px * this.center.y, 
+              scale_px * this.center.z);
+    
+    // Esfera semitransparente para visualizar colisiones
+    fill(255, 100, 100); // Rojo semitransparente
+    noStroke();
+    sphere(scale_px * this.radius, 16, 16);
+    pop();
+  }
+}
+

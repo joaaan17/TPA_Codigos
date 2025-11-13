@@ -7,6 +7,20 @@ let system;
 let dt = 0.016;  // ~60 FPS
 let vel_viento;
 
+// Variables para la esfera de colisión
+let collisionSphere;
+let sphere_velocity = 0.05; // Velocidad de movimiento de la esfera (m/frame)
+
+// Sistema de input continuo estilo videojuego
+let keysPressed = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  forward: false,
+  backward: false
+};
+
 // Propiedades tela (optimizadas para rendimiento)
 let ancho_tela = 2.0;  // 2 metros de ancho
 let alto_tela = 2.0;   // 2 metros de alto
@@ -46,6 +60,15 @@ function setup() {
   if (use_shear) {
     add_shear_constraints(system, n_alto_tela, n_ancho_tela, shear_stiffness);
   }
+  
+  // CREAR ESFERA DE COLISIÓN
+  // Posicionar la esfera debajo y al centro de la tela
+  let sphere_center = createVector(ancho_tela / 2, -0.5, 0);
+  let sphere_radius = 0.3; // 30 cm de radio
+  collisionSphere = new SphereCollision(sphere_center, sphere_radius);
+  system.add_collision_object(collisionSphere);
+  
+  console.log("Esfera de colisión creada en posición:", sphere_center);
                     
   system.set_n_iters(5); // Podemos permitirnos más iteraciones ahora
 }
@@ -83,6 +106,9 @@ function draw() {
   
   // Control de cámara orbital (usa el mouse para rotar)
   orbitControl();
+  
+  // MOVER ESFERA DE FORMA CONTINUA (estilo videojuego)
+  moveSphereFromInput();
 
   system.apply_gravity(createVector(0.0, -9.81, 0.0)); // Gravedad más realista
   aplica_viento();
@@ -144,12 +170,62 @@ function display() {
     sphere(size, 6, 6); // Esferas negras con detalle moderado
     pop();
   }
+  
+  // DIBUJAR ESFERA DE COLISIÓN
+  for (let i = 0; i < system.collisionObjects.length; i++) {
+    system.collisionObjects[i].display(scale_px);
+  }
+}
+
+// ============================================
+// MOVIMIENTO CONTINUO DE LA ESFERA (llamado en draw)
+// ============================================
+function moveSphereFromInput() {
+  // Mover esfera basándose en teclas presionadas (continuo)
+  if (keysPressed.up) {
+    collisionSphere.center.y += sphere_velocity;
+  }
+  if (keysPressed.down) {
+    collisionSphere.center.y -= sphere_velocity;
+  }
+  if (keysPressed.left) {
+    collisionSphere.center.x -= sphere_velocity;
+  }
+  if (keysPressed.right) {
+    collisionSphere.center.x += sphere_velocity;
+  }
+  if (keysPressed.forward) {
+    collisionSphere.center.z -= sphere_velocity;
+  }
+  if (keysPressed.backward) {
+    collisionSphere.center.z += sphere_velocity;
+  }
 }
 
 // ============================================
 // EVENTOS DE TECLADO
 // ============================================
 function keyPressed() {
+  // ===== CONTROLES DE LA ESFERA (estilo videojuego) =====
+  if (keyCode === UP_ARROW) {
+    keysPressed.up = true;
+  } else if (keyCode === DOWN_ARROW) {
+    keysPressed.down = true;
+  }
+  
+  if (keyCode === LEFT_ARROW) {
+    keysPressed.left = true;
+  } else if (keyCode === RIGHT_ARROW) {
+    keysPressed.right = true;
+  }
+  
+  if (key === 'U' || key === 'u') {
+    keysPressed.forward = true;
+  } else if (key === 'O' || key === 'o') {
+    keysPressed.backward = true;
+  }
+  
+  // ===== TOGGLES DE RESTRICCIONES =====
   // Reiniciar simulación con/sin bending
   if (key === 'B' || key === 'b') {
     use_bending = !use_bending;
@@ -164,6 +240,7 @@ function keyPressed() {
     recrearTela();
   }
   
+  // ===== CONTROLES DE VIENTO =====
   // Viento - Eje Y (vertical)
   if (key === 'S' || key === 's') {
     vel_viento.y += 0.1; // Incremento de 10 décimas
@@ -183,6 +260,27 @@ function keyPressed() {
     vel_viento.x += 0.1; // Incremento de 10 décimas
   } else if (key === 'Z' || key === 'z') {
     vel_viento.x -= 0.1;
+  }
+}
+
+function keyReleased() {
+  // Liberar teclas de movimiento de la esfera
+  if (keyCode === UP_ARROW) {
+    keysPressed.up = false;
+  } else if (keyCode === DOWN_ARROW) {
+    keysPressed.down = false;
+  }
+  
+  if (keyCode === LEFT_ARROW) {
+    keysPressed.left = false;
+  } else if (keyCode === RIGHT_ARROW) {
+    keysPressed.right = false;
+  }
+  
+  if (key === 'U' || key === 'u') {
+    keysPressed.forward = false;
+  } else if (key === 'O' || key === 'o') {
+    keysPressed.backward = false;
   }
 }
 
@@ -206,6 +304,9 @@ function recrearTela() {
   if (use_shear) {
     add_shear_constraints(system, n_alto_tela, n_ancho_tela, shear_stiffness);
   }
+  
+  // Re-añadir esfera de colisión
+  system.add_collision_object(collisionSphere);
   
   system.set_n_iters(5);
 }
