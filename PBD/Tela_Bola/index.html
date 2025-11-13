@@ -34,13 +34,16 @@
             pointer-events: none;
         }
         
-        /* Permitir interacción en el panel de la esfera */
-        #sphere-controls {
+        /* Permitir interacción en los paneles de controles */
+        #sphere-controls,
+        #cube-controls {
             pointer-events: auto !important;
         }
         
         #sphere-controls input,
-        #sphere-controls button {
+        #sphere-controls button,
+        #cube-controls select,
+        #cube-controls button {
             pointer-events: auto !important;
         }
         #stats .label {
@@ -63,13 +66,40 @@
         <div><span class="label">Bending:</span> <span id="bending" class="value">ON</span></div>
         <div><span class="label">Shear:</span> <span id="shear" class="value">ON</span></div>
         <div><span class="label">Viento:</span> <span id="wind" class="value">(0.000, 0.000, 0.000)</span></div>
+        <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 8px;">
+            <div style="color: #88ccff; font-weight: bold; margin-bottom: 5px;">⚡ ESTADO FUERZAS:</div>
+            <div style="font-size: 13px;"><span class="label">Damping:</span> <span id="force-damping" class="value">ON</span></div>
+            <div style="font-size: 13px;"><span class="label">Col. Plano:</span> <span id="force-plane" class="value">ON</span></div>
+            <div style="font-size: 13px;"><span class="label">Col. Esfera:</span> <span id="force-sphere" class="value">ON</span></div>
+            <div style="font-size: 13px;"><span class="label">Anclas (XZ):</span> <span id="force-anchors" class="value">ON</span></div>
+        </div>
+        
+        <!-- Control de resolución del cubo -->
+        <div id="cube-controls" style="margin-top: 15px; padding: 10px; background-color: rgba(100, 150, 255, 0.2); border-radius: 5px; pointer-events: auto;">
+            <div style="color: #aaccff; font-weight: bold; margin-bottom: 5px;">🧊 CONFIGURAR CUBO:</div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                <label for="cubeResolution" style="color: #ffffff;">Resolución:</label>
+                <select id="cubeResolution" 
+                        style="padding: 3px; background-color: #333; color: white; border: 1px solid #666; border-radius: 3px; pointer-events: auto; cursor: pointer;">
+                    <option value="2">2x2x2 (8 part.)</option>
+                    <option value="3" selected>3x3x3 (27 part.)</option>
+                    <option value="4">4x4x4 (64 part.)</option>
+                    <option value="5">5x5x5 (125 part.)</option>
+                    <option value="6">6x6x6 (216 part.)</option>
+                </select>
+            </div>
+            <button id="recreateCubeButton" 
+                    style="width: 100%; padding: 6px; background-color: #6699ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; pointer-events: auto;">
+                RECREAR CUBO
+            </button>
+        </div>
         
         <!-- Control de esfera que cae -->
         <div id="sphere-controls" style="margin-top: 15px; padding: 10px; background-color: rgba(255, 100, 100, 0.2); border-radius: 5px; pointer-events: auto;">
             <div style="color: #ffaaaa; font-weight: bold; margin-bottom: 5px;">🔴 ESFERA QUE CAE:</div>
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
                 <label for="dropHeight" style="color: #ffffff;">Altura (m):</label>
-                <input type="number" id="dropHeight" value="1.5" min="0.5" max="3.0" step="0.1" 
+                <input type="number" id="dropHeight" value="4.5" min="0.5" max="6.0" step="0.1" 
                        style="width: 60px; padding: 3px; background-color: #333; color: white; border: 1px solid #666; border-radius: 3px; pointer-events: auto;">
             </div>
             <button id="dropButton" 
@@ -80,12 +110,18 @@
         
         <div style="margin-top: 10px; color: #ffdd88;"><strong>CONTROLES:</strong></div>
         <div style="color: #ffaaaa;"><strong>🔴 Soltar Bola:</strong></div>
-        <div>ESPACIO - Soltar (alternativa)</div>
+        <div>ESPACIO - Soltar</div>
         <div style="margin-top: 5px; color: #ff88ff;"><strong>🎮 Modo:</strong></div>
         <div>M - Cambiar Tela/Cubo</div>
+        <div style="margin-top: 5px; color: #88ccff;"><strong>🔧 Fuerzas (toggle ON/OFF):</strong></div>
+        <div style="font-size: 12px;">P - Modo Debug (sin esfera)</div>
+        <div style="font-size: 12px;">D - Damping (Müller)</div>
+        <div style="font-size: 12px;">F - Colisión Plano</div>
+        <div style="font-size: 12px;">E - Colisión Esfera</div>
+        <div style="font-size: 12px;">H - Anclas (fija base XZ)</div>
+        <div style="font-size: 12px; color: #ffff88;">I - Ver Estado Fuerzas</div>
         <div style="margin-top: 5px; color: #aaaaff;"><strong>Restricciones:</strong></div>
         <div>B - Toggle Bending</div>
-        <div>H - Toggle Shear</div>
         <div style="margin-top: 5px; color: #aaffaa;"><strong>Viento:</strong></div>
         <div>S/X - Arriba/Abajo</div>
         <div>C/Z - Derecha/Izquierda</div>

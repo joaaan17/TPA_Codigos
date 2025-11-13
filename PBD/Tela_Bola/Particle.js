@@ -7,16 +7,16 @@ class Particle {
     this.force = createVector(0.0, 0.0, 0.0);
     this.velocity = v.copy();
     this.location = l.copy();
-    this.last_location = createVector(0, 0, 0);
+    
+    // CRÍTICO: last_location DEBE ser igual a location inicial
+    // Si es (0,0,0), genera velocidades artificiales en el primer frame
+    this.last_location = l.copy(); // ✅ CORREGIDO
     
     this.masa = ma;
     this.w = 1.0 / ma;
     
     this.bloqueada = false;
     this.display_size = 0.1;
-    
-    // Flag para detección de colisión con plano (se resetea cada frame)
-    this.collidedWithPlane = false;
   }
 
   set_bloqueada(bl) {

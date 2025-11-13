@@ -394,7 +394,7 @@ class SphereCollision {
     // Si es dinámica, tiene velocidad y responde a gravedad
     this.isDynamic = isDynamic;
     this.velocity = createVector(0, 0, 0);
-    this.mass = 1.0; // Masa de la esfera (1 kg)
+    this.mass = 0.2; // ✅ REDUCIDO: 1.0 → 0.2 kg (bola mucho más ligera)
     this.isReleased = false; // Controla si la esfera ha sido soltada
   }
   
@@ -412,7 +412,6 @@ class SphereCollision {
     if (this.center.y - this.radius < 0) {
       this.center.y = this.radius; // Poner justo sobre el plano
       this.velocity.y *= -0.5; // Rebote con pérdida de energía
-      this.velocity.mult(0.95); // Fricción al rebotar
     }
   }
   
@@ -436,6 +435,15 @@ class SphereCollision {
    * @param {Array} particles - Array de partículas del sistema
    */
   project(particles) {
+    // Si la esfera es dinámica y NO ha sido soltada, no colisiona
+    // Esto evita que empuje el cubo mientras está suspendida
+    if (this.isDynamic && !this.isReleased) {
+      // console.log("🟡 Esfera suspendida - sin colisión"); // Debug
+      return; // Esfera suspendida = sin colisión
+    }
+    
+    let collisions = 0; // Contador para debug
+    
     for (let i = 0; i < particles.length; i++) {
       let part = particles[i];
       
@@ -475,7 +483,13 @@ class SphereCollision {
       
       // 7. Actualizar posición de la partícula
       part.location.add(correction);
+      collisions++;
     }
+    
+    // Debug: reportar colisiones
+    // if (collisions > 0) {
+    //   console.log(`🔴 Esfera: ${collisions} colisiones detectadas`);
+    // }
   }
   
   display(scale_px) {
@@ -513,7 +527,9 @@ class AnchorConstraint extends Constraint {
   proyecta_restriccion() {
     let part = this.particles[0];
     
-    // Vector de diferencia entre partícula y ancla
+    // Anclar la partícula completamente a su posición inicial (X, Y, Z)
+    // Esto mantiene la base del cubo firmemente pegada al plano
+    
     let vd = p5.Vector.sub(part.location, this.anchor);
     let dist_actual = vd.mag();
     
@@ -583,9 +599,6 @@ class PlaneCollision {
       
       // 5. Aplicar corrección de posición
       part.location.add(correction);
-      
-      // 6. MARCAR que esta partícula colisionó (para aplicar fricción después)
-      part.collidedWithPlane = true;
     }
   }
   

@@ -34,99 +34,49 @@ class PBDSystem {
     this.collisionObjects.push(obj);
   }
 
-  apply_gravity(g) {
-    let p;
-    for (let i = 0; i < this.particles.length; i++) {
-      p = this.particles[i];
-      if (p.w > 0) { // Si la masa es infinita, no se aplica
-        p.force.add(p5.Vector.mult(g, p.masa));
-      }
-    }
-  }
-
-  run(dt) {
+  run(dt, apply_damping = true, use_plane_col = true, use_sphere_col = true) {
     // Simulación PBD según Müller et al.
     
-    // 1. Resetear flags de colisión
-    for (let i = 0; i < this.particles.length; i++) {
-      this.particles[i].collidedWithPlane = false;
-    }
-    
-    // 2. Predicción de posiciones (integración explícita)
+    // 1. Predicción de posiciones (integración explícita)
     for (let i = 0; i < this.particles.length; i++) {
       this.particles[i].update(dt);
     }
 
-    // 3. Bucle de solver de restricciones
+    // 2. Bucle de solver de restricciones
     for (let it = 0; it < this.niters; it++) {
-      // 3a. Resolver todas las restricciones internas (distance, bending, shear)
+      // 2a. Resolver todas las restricciones internas (distance, bending, shear)
       for (let i = 0; i < this.constraints.length; i++) {
         this.constraints[i].proyecta_restriccion();
       }
       
-      // 3b. Resolver colisiones con objetos externos (esferas, planos, etc.)
-      // Aquí se marcan las partículas que colisionaron
+      // 2b. Resolver colisiones con objetos externos (controlables individualmente)
       for (let i = 0; i < this.collisionObjects.length; i++) {
-        this.collisionObjects[i].project(this.particles);
+        let obj = this.collisionObjects[i];
+        
+        // Verificar tipo de objeto y si está activado
+        if (obj.constructor.name === 'PlaneCollision' && !use_plane_col) {
+          continue; // Saltar colisión con plano si está desactivada
+        }
+        if (obj.constructor.name === 'SphereCollision' && !use_sphere_col) {
+          continue; // Saltar colisión con esfera si está desactivada
+        }
+        
+        obj.project(this.particles);
       }
     }
      
-    // 4. Actualizar velocidades basándose en el cambio de posición
+    // 3. Actualizar velocidades basándose en el cambio de posición
     // v[i] = (p_new[i] - p_old[i]) / dt
     for (let i = 0; i < this.particles.length; i++) {
       this.particles[i].update_pbd_vel(dt);
     }
     
-    // 5. APLICAR FRICCIÓN (según Müller07, DESPUÉS de actualizar velocidades)
-    this.apply_friction();
-    
-    // 6. APLICAR DAMPING GLOBAL (según Müller07, preserva movimiento rígido)
-    this.applyGlobalDamping(0.25); // k_damping entre 0.1-0.2
+    // 4. APLICAR DAMPING GLOBAL (según Müller07, preserva movimiento rígido)
+    if (apply_damping) {
+      this.applyGlobalDamping(0.1); // k_damping reducido a 0.1 (más suave)
+    }
   }
   
-  apply_friction() {
-    // Coeficiente de fricción (configurable)
-    const frictionCoefficient = 0.8; // 0.5-0.8 funciona bien
-    
-    // Buscar el plano en collisionObjects (asumiendo que solo hay uno)
-    let planeNormal = null;
-    for (let i = 0; i < this.collisionObjects.length; i++) {
-      if (this.collisionObjects[i].normal) {
-        planeNormal = this.collisionObjects[i].normal;
-        break;
-      }
-    }
-    
-    // Si no hay plano, no aplicar fricción
-    if (!planeNormal) return;
-    
-    // Para cada partícula que colisionó con el plano
-    for (let i = 0; i < this.particles.length; i++) {
-      let part = this.particles[i];
-      
-      // Solo aplicar fricción si la partícula colisionó en este frame
-      if (!part.collidedWithPlane) continue;
-      
-      // Obtener velocidad actual
-      let v = part.velocity;
-      
-      // Descomponer velocidad en componente normal y tangencial
-      let v_normal_mag = v.dot(planeNormal);
-      let v_normal = p5.Vector.mult(planeNormal, v_normal_mag);
-      let v_tangent = p5.Vector.sub(v, v_normal);
-      
-      // Aplicar fricción SOLO a la componente tangencial
-      v_tangent.mult(1.0 - frictionCoefficient);
-      
-      // OPCIONAL: Reducir rebote (coeficiente de restitución)
-      if (v_normal_mag < 0) {
-        v_normal.mult(0.3); // 30% de rebote
-      }
-      
-      // Reconstruir velocidad final
-      part.velocity = p5.Vector.add(v_normal, v_tangent);
-    }
-  }
   
   // ============================================
   // DAMPING GLOBAL DE MÜLLER (2007)
