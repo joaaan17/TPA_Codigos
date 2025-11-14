@@ -544,6 +544,89 @@ class SphereContactConstraint extends Constraint {
 }
 
 // ============================================
+// CLASE LEGACYSPHERECOLLISION (Modo clásico)
+// ============================================
+class LegacySphereCollision {
+  constructor(center, radius, isDynamic = false) {
+    this.center = center.copy();
+    this.radius = radius;
+    this.isDynamic = isDynamic;
+    this.velocity = createVector(0, 0, 0);
+    this.isReleased = false;
+    this.epsilon = 0.0001;
+  }
+  
+  update(dt, gravity) {
+    if (!this.isDynamic || !this.isReleased) return;
+    this.velocity.add(p5.Vector.mult(gravity, dt));
+    this.center.add(p5.Vector.mult(this.velocity, dt));
+    
+    if (this.center.y - this.radius < 0) {
+      this.center.y = this.radius;
+      this.velocity.y *= -0.5;
+    }
+  }
+  
+  release() {
+    this.isReleased = true;
+    this.velocity.set(0, 0, 0);
+  }
+  
+  reset(newPosition) {
+    this.center = newPosition.copy();
+    this.velocity.set(0, 0, 0);
+    this.isReleased = false;
+  }
+  
+  project(particles) {
+    for (let i = 0; i < particles.length; i++) {
+      particles[i].inCollisionWithSphere = false;
+    }
+    
+    if (!this.isDynamic || !this.isReleased) {
+      return;
+    }
+    
+    for (let i = 0; i < particles.length; i++) {
+      let part = particles[i];
+      if (part.bloqueada) continue;
+      
+      let p = part.location;
+      let dir = p5.Vector.sub(p, this.center);
+      let dist = dir.mag();
+      let safetyMargin = 0.0;
+      
+      if (dist >= this.radius + safetyMargin) continue;
+      
+      let n;
+      if (dist < this.epsilon) {
+        n = createVector(0, 1, 0);
+        dist = this.epsilon;
+      } else {
+        n = dir.normalize();
+      }
+      
+      let C = dist - (this.radius + safetyMargin);
+      let correction = p5.Vector.mult(n, -C);
+      part.location.add(correction);
+      part.last_location = part.location.copy();
+      part.inCollisionWithSphere = true;
+    }
+  }
+  
+  display(scale_px) {
+    push();
+    translate(scale_px * this.center.x,
+              -scale_px * this.center.y,
+              scale_px * this.center.z);
+    fill(255, 150, 50, 200);
+    noStroke();
+    sphere(scale_px * this.radius, 16, 16);
+    pop();
+  }
+}
+
+// ============================================
 // CLASE ANCHORCONSTRAINT (Ancla partícula a posición fija)
 // ============================================
 class AnchorConstraint extends Constraint {

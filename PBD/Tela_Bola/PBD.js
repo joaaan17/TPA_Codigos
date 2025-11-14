@@ -24,8 +24,9 @@ let vel_viento;
 // Variables para colisiones
 let groundPlane; // Plataforma (plano)
 let sphereParticle = null; // Partícula-esfera integrada en el solver
+let fallingSphere = null; // Esfera clásica (modo legacy)
 let sphere_radius_default = 0.22;
-let sphere_mass_multiplier = 20.0; // En relación a la masa de una partícula del cubo
+let sphere_mass_multiplier = 40.0; // Mayor masa relativa para impactos más fuertes
 let sphere_drop_height = 4.5; // Altura desde donde cae la esfera (configurable) - 3m más arriba
 
 // Propiedades tela (optimizadas para rendimiento)
@@ -52,6 +53,7 @@ let use_anchors = true; // H: Controlar anclas de la base (mantiene cubo en posi
 let use_damping = true; // D: Controlar damping de Müller
 let use_plane_collision = true; // F: Controlar colisión con plano (Floor)
 let use_sphere_collision = true; // E: Controlar colisión con esfera
+let use_sphere_particle = true; // nuevo botón para activar/desactivar comportamiento PBD de la bola
 let use_shape_matching = true; // K: Controlar Shape Matching (Müller 2005)
 let use_volume_constraints = true; // Control del método volumétrico
 let deformationMode = 'both'; // 'shape', 'volume', 'both', 'custom'
@@ -110,6 +112,15 @@ function setupButtonListeners() {
     console.log("✓ Listener del botón recrear cubo configurado");
   } else {
     console.log("⚠️ Botón recreateCubeButton no encontrado");
+  }
+  
+  let toggleSphereModeButton = document.getElementById('toggleSphereModeButton');
+  if (toggleSphereModeButton) {
+    toggleSphereModeButton.addEventListener('click', function() {
+      use_sphere_particle = !use_sphere_particle;
+      console.log(`🎛️ Modo bola PBD: ${use_sphere_particle ? "ON (corrección simétrica)" : "OFF (modo clásico)"}`);
+      recreateCubeWithNewResolution();
+    });
   }
   
   // Selector para elegir el método de deformación
@@ -202,6 +213,7 @@ function updateDeformationModeLabel() {
 // ============================================
 function createClothMode() {
   sphereParticle = null;
+  fallingSphere = null;
   system = crea_tela(alto_tela,
                     ancho_tela,
                     densidad_tela,
@@ -218,6 +230,20 @@ function createClothMode() {
   // AÑADIR RESTRICCIONES DE SHEAR (opcional)
   if (use_shear) {
     add_shear_constraints(system, n_alto_tela, n_ancho_tela, shear_stiffness);
+  }
+  
+  if (use_anchors) {
+    let anchorStiffness = 0.99;
+    for (let i = 0; i < n_ancho_tela; i++) {
+      let idx = i * n_alto_tela; // fila inferior (j = 0)
+      let particle = system.particles[idx];
+      particle.last_location = particle.location.copy();
+      let anchor = new AnchorConstraint(particle, particle.location.copy(), anchorStiffness);
+      system.add_constraint(anchor);
+    }
+    console.log(`🔒 Tela anclada al plano con ${n_ancho_tela} anclas (stiffness=${anchorStiffness})`);
+  } else {
+    console.log("🔓 Tela sin anclas (base libre)");
   }
   
   // CREAR PLATAFORMA (PLANO)
@@ -239,8 +265,8 @@ function createCubeMode() {
   // GENERAR CUBO SOFT-BODY con resolución configurable
   let cube_size = 0.8; // Tamaño: 0.8 metros
   // cube_resolution es variable global, se lee del selector
-  let cube_mass = 2.0; // ✅ AUMENTADO: 0.5 → 1.0 kg (mucho más pesado)
-  let cube_stiffness = 0.98; // ✅ AUMENTADO: 0.8 → 0.98 (mucho más rígido)
+  let cube_mass = 2.0; // Masa por partícula
+  let cube_stiffness = 0.8; // Menos rígido para permitir más deformación
   
   // POSICIONAR CUBO CON LA BASE EN EL PLANO (Y = 0)
   // Centro en Y = cube_size/2 para que la base esté en Y = 0
@@ -314,19 +340,27 @@ function createCubeMode() {
   groundPlane = new PlaneCollision(plane_point, plane_normal);
   system.add_collision_object(groundPlane);
   
-  // CREAR ESFERA COMO PARTÍCULA PBD (solo si no estamos en modo debug)
   sphereParticle = null;
+  fallingSphere = null;
   if (!debug_mode && use_sphere) {
-    sphereParticle = createPBDSphereParticle(cube_mass);
-    system.particles.push(sphereParticle);
-    sphereParticle.debugId = system.particles.length - 1;
-    console.log(`🔴 Esfera PBD creada (radio=${sphereParticle.radius.toFixed(2)}m, masa=${sphereParticle.masa.toFixed(2)}kg)`);
-    
-    for (let i = 0; i < softCube.particles.length; i++) {
-      system.add_constraint(new SphereContactConstraint(softCube.particles[i], sphereParticle));
+    if (use_sphere_particle) {
+      sphereParticle = createPBDSphereParticle(cube_mass);
+      system.particles.push(sphereParticle);
+      sphereParticle.debugId = system.particles.length - 1;
+      console.log(`🔴 Esfera PBD creada (radio=${sphereParticle.radius.toFixed(2)}m, masa=${sphereParticle.masa.toFixed(2)}kg)`);
+      
+      for (let i = 0; i < softCube.particles.length; i++) {
+        system.add_constraint(new SphereContactConstraint(softCube.particles[i], sphereParticle));
+      }
+    } else {
+      let sphere_radius = sphere_radius_default;
+      let sphere_start_pos = createVector(0.0, sphere_drop_height, 0.0);
+      fallingSphere = new LegacySphereCollision(sphere_start_pos, sphere_radius, true);
+      system.add_collision_object(fallingSphere);
+      console.log("🔴 Esfera rígida clásica creada (modo legacy).");
     }
   } else {
-    console.log(`🔵 MODO DEBUG: Sin esfera PBD - Solo cubo en reposo`);
+    console.log(`🔵 MODO DEBUG: Sin esfera - Solo cubo en reposo`);
   }
   
   console.log(`🟥 MODO CUBO - Posado y anclado al plano, listo para simular`);
@@ -335,6 +369,9 @@ function createCubeMode() {
   if (sphereParticle) {
     console.log(`🔴 Estado esfera: isReleased=${sphereParticle.isReleased}, masa=${sphereParticle.masa.toFixed(2)}kg`);
     console.log(`📍 Posición esfera: (${sphereParticle.location.x.toFixed(3)}, ${sphereParticle.location.y.toFixed(3)}, ${sphereParticle.location.z.toFixed(3)})`);
+  } else if (fallingSphere) {
+    console.log(`🔴 Esfera legacy lista. isReleased=${fallingSphere.isReleased}`);
+    console.log(`📍 Posición esfera: (${fallingSphere.center.x.toFixed(3)}, ${fallingSphere.center.y.toFixed(3)}, ${fallingSphere.center.z.toFixed(3)})`);
   }
   
   // DIAGNÓSTICO: Imprimir primeras 10 constraints para verificar rest lengths
@@ -380,29 +417,37 @@ function diagnosticarConstraints() {
 function dropSphere() {
   console.log("🔴 Botón presionado - dropSphere() llamada");
   
-  if (!sphereParticle) {
-    console.log("⚠️ ERROR: sphereParticle no existe");
-    return;
-  }
-  
   // Leer altura del input HTML
   let heightInput = document.getElementById('dropHeight');
   if (heightInput) {
-    sphere_drop_height = parseFloat(heightInput.value) || 1.5;
+    sphere_drop_height = parseFloat(heightInput.value) || 4.5;
   }
   
   console.log(`📏 Altura configurada: ${sphere_drop_height}m`);
   
-  // Reset posición a la altura especificada
   let new_pos = createVector(0.0, sphere_drop_height, 0.0);
-  sphereParticle.location = new_pos.copy();
-  sphereParticle.last_location = new_pos.copy();
-  sphereParticle.velocity.set(0, 0, 0);
-  sphereParticle.force.set(0, 0, 0);
-  sphereParticle.isReleased = true;
-  sphereParticle.isDynamic = true;
   
-  console.log("📍 Esfera lista en", new_pos);
+  if (use_sphere_particle) {
+    if (!sphereParticle) {
+      console.log("⚠️ ERROR: sphereParticle no existe");
+      return;
+    }
+    sphereParticle.location = new_pos.copy();
+    sphereParticle.last_location = new_pos.copy();
+    sphereParticle.velocity.set(0, 0, 0);
+    sphereParticle.force.set(0, 0, 0);
+    sphereParticle.isReleased = true;
+    sphereParticle.isDynamic = true;
+    console.log("📍 Esfera PBD lista en", new_pos);
+  } else {
+    if (!fallingSphere) {
+      console.log("⚠️ ERROR: esfera legacy no existe");
+      return;
+    }
+    fallingSphere.reset(new_pos);
+    fallingSphere.release();
+    console.log("📍 Esfera legacy lista en", new_pos);
+  }
 }
 
 // Hacer funciones accesibles globalmente para onclick
@@ -475,8 +520,10 @@ function draw() {
   aplica_viento();
   }
   
-  if (sphereParticle && sphereParticle.isSphere && sphereParticle.isDynamic && sphereParticle.isReleased && !debug_mode && !debug_rest_pose) {
+  if (use_sphere_particle && sphereParticle && sphereParticle.isSphere && sphereParticle.isDynamic && sphereParticle.isReleased && !debug_mode && !debug_rest_pose) {
     sphereParticle.force.add(createVector(0.0, -9.81 * sphereParticle.masa, 0.0));
+  } else if (!use_sphere_particle && fallingSphere && fallingSphere.isDynamic && !debug_mode && !debug_rest_pose) {
+    fallingSphere.update(dt, createVector(0.0, -9.81, 0.0));
   }
 
   // Ejecutar solver PBD con fuerzas controlables individualmente
@@ -529,6 +576,7 @@ function updateForceIndicators() {
   let anchorsEl = document.getElementById('force-anchors');
   let volumeEl = document.getElementById('force-volume');
   let modeEl = document.getElementById('force-mode');
+  let sphereModeEl = document.getElementById('force-sphere-mode');
   
   if (dampingEl) {
     dampingEl.textContent = use_damping ? 'ON' : 'OFF';
@@ -564,6 +612,11 @@ function updateForceIndicators() {
     modeEl.textContent = getReadableDeformationMode();
     modeEl.style.color = deformationMode === 'custom' ? '#ffcc66' : '#ffffff';
   }
+  
+  if (sphereModeEl) {
+    sphereModeEl.textContent = use_sphere_particle ? 'PBD' : 'LEGACY';
+    sphereModeEl.style.color = use_sphere_particle ? '#88ff88' : '#ffcc66';
+  }
 }
 
 function display() {
@@ -577,6 +630,9 @@ function display() {
   beginShape(LINES);
   for (let i = 0; i < nconst; i++) {
     let c = system.constraints[i];
+    if (c instanceof SphereContactConstraint) {
+      continue; // no dibujar las restricciones cubo-esfera
+    }
     
     // Solo dibujar si la constraint tiene al menos 2 partículas
     // (AnchorConstraint solo tiene 1, no se dibuja)
@@ -604,7 +660,7 @@ function display() {
     pop();
   }
   
-  if (sphereParticle) {
+  if (use_sphere_particle && sphereParticle) {
     push();
     translate(scale_px * sphereParticle.location.x,
               -scale_px * sphereParticle.location.y,
@@ -764,6 +820,7 @@ function mostrarEstadoFuerzas() {
   console.log(`  🔴 Colisión Esfera:   ${use_sphere_collision ? "ON ✓" : "OFF ✗"}`);
   console.log(`  🔒 Anclas (XZ):       ${use_anchors ? "ON ✓ (base fija)" : "OFF ✗ (cubo libre)"}`);
   console.log(`  🎛️ Modo Deformación:  ${getReadableDeformationMode()}`);
+  console.log(`  ⚽ Modo Bola:         ${use_sphere_particle ? "PBD (simétrica)" : "LEGACY (sólo cubo)"}`);
   console.log(`  💤 Debug Rest Pose:   ${debug_rest_pose ? "ON ✓" : "OFF ✗"}`);
   console.log("═".repeat(40) + "\n");
 }

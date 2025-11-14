@@ -10,11 +10,13 @@ function crea_tela(alto, ancho, dens, n_alto, n_ancho, stiffness, display_size) 
   let dy = alto / (n_alto - 1.0);
   
   let id = 0;
+  let offsetX = -ancho / 2.0;
   for (let i = 0; i < n_ancho; i++) {
     for (let j = 0; j < n_alto; j++) {
       let p = tela.particles[id];
-      p.location.set(dx * i, dy * j, 0);
+      p.location.set(offsetX + dx * i, dy * j, 0);
       p.display_size = display_size;
+      p.last_location = p.location.copy();
       id++;
     }
   }
@@ -45,13 +47,6 @@ function crea_tela(alto, ancho, dens, n_alto, n_ancho, stiffness, display_size) 
       id++;
     }
   }
-  
-  // Fijamos dos esquinas
-  id = n_alto - 1;
-  tela.particles[id].set_bloqueada(true); 
-  
-  id = N - 1;
-  tela.particles[id].set_bloqueada(true); 
   
   console.log("Tela creada con " + tela.particles.length + " partículas y " + tela.constraints.length + " restricciones."); 
   
