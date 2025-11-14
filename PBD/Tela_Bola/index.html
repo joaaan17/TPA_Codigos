@@ -69,9 +69,12 @@
         <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 8px;">
             <div style="color: #88ccff; font-weight: bold; margin-bottom: 5px;">⚡ ESTADO FUERZAS:</div>
             <div style="font-size: 13px;"><span class="label">Damping:</span> <span id="force-damping" class="value">ON</span></div>
+            <div style="font-size: 13px;"><span class="label">Shape Match:</span> <span id="force-shapematch" class="value">ON</span></div>
             <div style="font-size: 13px;"><span class="label">Col. Plano:</span> <span id="force-plane" class="value">ON</span></div>
             <div style="font-size: 13px;"><span class="label">Col. Esfera:</span> <span id="force-sphere" class="value">ON</span></div>
             <div style="font-size: 13px;"><span class="label">Anclas (XZ):</span> <span id="force-anchors" class="value">ON</span></div>
+            <div style="font-size: 13px;"><span class="label">Vol. Tetra:</span> <span id="force-volume" class="value">ON</span></div>
+            <div style="font-size: 13px;"><span class="label">Modo:</span> <span id="force-mode" class="value">Ambos</span></div>
         </div>
         
         <!-- Control de resolución del cubo -->
@@ -88,6 +91,17 @@
                     <option value="6">6x6x6 (216 part.)</option>
                 </select>
             </div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                <label for="deformationMode" style="color: #ffffff;">Método:</label>
+                <select id="deformationMode"
+                        style="padding: 3px; background-color: #333; color: white; border: 1px solid #666; border-radius: 3px; pointer-events: auto; cursor: pointer;">
+                    <option value="both" selected>Ambos (Shape + Vol)</option>
+                    <option value="shape">Solo Shape Matching</option>
+                    <option value="volume">Solo Volumétrico</option>
+                    <option value="custom">Personalizado (teclas)</option>
+                </select>
+            </div>
+            <div style="font-size: 11px; color: #d7e1ff; margin-bottom: 5px;">Al cambiar el método se recrea el cubo automáticamente.</div>
             <button id="recreateCubeButton" 
                     style="width: 100%; padding: 6px; background-color: #6699ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; pointer-events: auto;">
                 RECREAR CUBO
@@ -116,6 +130,7 @@
         <div style="margin-top: 5px; color: #88ccff;"><strong>🔧 Fuerzas (toggle ON/OFF):</strong></div>
         <div style="font-size: 12px;">P - Modo Debug (sin esfera)</div>
         <div style="font-size: 12px;">D - Damping (Müller)</div>
+        <div style="font-size: 12px; color: #ffcc88;">K - Shape Matching ✨</div>
         <div style="font-size: 12px;">F - Colisión Plano</div>
         <div style="font-size: 12px;">E - Colisión Esfera</div>
         <div style="font-size: 12px;">H - Anclas (fija base XZ)</div>
@@ -132,6 +147,7 @@
     <!-- Scripts de la simulación PBD -->
     <script src="Particle.js"></script>
     <script src="Constraint.js"></script>
+    <script src="ShapeMatching.js"></script>
     <script src="PBDSystem.js"></script>
     <script src="Tela.js"></script>
     <script src="SoftBodyCube.js"></script>

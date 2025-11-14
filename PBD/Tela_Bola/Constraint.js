@@ -383,131 +383,163 @@ class ShearConstraint extends Constraint {
 }
 
 // ============================================
-// CLASE SPHERECOLLISION (Colisión con esfera)
+// CLASE VOLUMECONSTRAINT (Müller 2007)
 // ============================================
-class SphereCollision {
-  constructor(center, radius, isDynamic = false) {
-    this.center = center.copy(); // p5.Vector - centro de la esfera
-    this.radius = radius; // number - radio de la esfera
-    this.epsilon = 0.0001; // Para evitar divisiones por cero
-    
-    // Si es dinámica, tiene velocidad y responde a gravedad
-    this.isDynamic = isDynamic;
-    this.velocity = createVector(0, 0, 0);
-    this.mass = 0.2; // ✅ REDUCIDO: 1.0 → 0.2 kg (bola mucho más ligera)
-    this.isReleased = false; // Controla si la esfera ha sido soltada
+class VolumeConstraint extends Constraint {
+  constructor(p1, p2, p3, p4, restVolume, k) {
+    super();
+    this.particles.push(p1);
+    this.particles.push(p2);
+    this.particles.push(p3);
+    this.particles.push(p4);
+    this.restVolume = restVolume;
+    this.stiffness = k;
+    this.k_coef = k;
+    this.epsilon = 1e-8;
   }
   
-  // Actualizar física si es dinámica Y ha sido soltada
-  update(dt, gravity) {
-    if (!this.isDynamic || !this.isReleased) return;
+  proyecta_restriccion() {
+    let part1 = this.particles[0];
+    let part2 = this.particles[1];
+    let part3 = this.particles[2];
+    let part4 = this.particles[3];
     
-    // Aplicar gravedad
-    this.velocity.add(p5.Vector.mult(gravity, dt));
+    let p1 = part1.location;
+    let p2 = part2.location;
+    let p3 = part3.location;
+    let p4 = part4.location;
     
-    // Actualizar posición
-    this.center.add(p5.Vector.mult(this.velocity, dt));
+    // Volumen actual del tetraedro (signed)
+    let v21 = p5.Vector.sub(p2, p1);
+    let v31 = p5.Vector.sub(p3, p1);
+    let v41 = p5.Vector.sub(p4, p1);
+    let signedVolume = v21.dot(p5.Vector.cross(v31, v41)) / 6.0;
     
-    // Colisión simple con el plano (Y = 0)
-    if (this.center.y - this.radius < 0) {
-      this.center.y = this.radius; // Poner justo sobre el plano
-      this.velocity.y *= -0.5; // Rebote con pérdida de energía
-    }
-  }
-  
-  // Soltar la esfera (activa la física)
-  release() {
-    this.isReleased = true;
-    this.velocity = createVector(0, 0, 0); // Empieza desde reposo
-  }
-  
-  // Reset posición y velocidad (vuelve a estar suspendida)
-  reset(newPosition) {
-    this.center = newPosition.copy();
-    this.velocity = createVector(0, 0, 0);
-    this.isReleased = false; // Vuelve a estar suspendida
-  }
-  
-  /**
-   * Proyecta las partículas que penetran la esfera hacia afuera
-   * Esta es una restricción de DESIGUALDAD: solo se aplica si C < 0
-   * 
-   * @param {Array} particles - Array de partículas del sistema
-   */
-  project(particles) {
-    // Si la esfera es dinámica y NO ha sido soltada, no colisiona
-    // Esto evita que empuje el cubo mientras está suspendida
-    if (this.isDynamic && !this.isReleased) {
-      // console.log("🟡 Esfera suspendida - sin colisión"); // Debug
-      return; // Esfera suspendida = sin colisión
+    // Constraint: C = V - V0 (usar volumen con signo para detectar inversiones)
+    this.C = signedVolume - this.restVolume;
+    if (abs(this.C) < this.epsilon) {
+      return;
     }
     
-    let collisions = 0; // Contador para debug
+    // Gradientes exactos según Müller 2007 (derivada del volumen con signo)
+    const inv6 = 1.0 / 6.0;
     
-    for (let i = 0; i < particles.length; i++) {
-      let part = particles[i];
-      
-      // Saltar partículas bloqueadas (no se pueden mover)
-      if (part.bloqueada) continue;
-      
-      // 1. Obtener posición predicha de la partícula
-      let p = part.location;
-      
-      // 2. Calcular dirección y distancia desde el centro de la esfera
-      let dir = p5.Vector.sub(p, this.center);
-      let dist = dir.mag();
-      
-      // 3. Evaluar colisión: dist < radius → hay penetración
-      if (dist >= this.radius) {
-        continue; // No hay colisión, pasar a la siguiente partícula
-      }
-      
-      // 4. HAY COLISIÓN - Calcular vector normal
-      // Proteger contra el caso raro dist == 0 (partícula exactamente en el centro)
-      let n;
-      if (dist < this.epsilon) {
-        // Usar un vector fijo para evitar NaN
-        n = createVector(0, 1, 0); // Empujar hacia arriba por defecto
-      } else {
-        n = dir.normalize();
-      }
-      
-      // 5. Calcular C(p) = dist - radius (será negativo porque hay penetración)
-      let C = dist - this.radius;
-      
-      // 6. Aplicar corrección PBD
-      // Para un constraint con un solo punto: Δp = -C * n
-      // Como C < 0 (penetración), -C > 0, empuja hacia afuera
-      // Equivalente a: Δp = (radius - dist) * n
-      let correction = p5.Vector.mult(n, -C);
-      
-      // 7. Actualizar posición de la partícula
-      part.location.add(correction);
-      collisions++;
+    let grad1 = p5.Vector.cross(
+      p5.Vector.sub(p2, p3),
+      p5.Vector.sub(p4, p3)
+    ).mult(inv6);
+    
+    let grad2 = p5.Vector.cross(
+      p5.Vector.sub(p3, p1),
+      p5.Vector.sub(p4, p1)
+    ).mult(inv6);
+    
+    let grad3 = p5.Vector.cross(
+      p5.Vector.sub(p4, p1),
+      p5.Vector.sub(p2, p1)
+    ).mult(inv6);
+    
+    let grad4 = p5.Vector.cross(
+      p5.Vector.sub(p2, p1),
+      p5.Vector.sub(p3, p1)
+    ).mult(inv6);
+    
+    // Denominador Σ w_j ||∇C_j||^2
+    let denom = 0.0;
+    denom += part1.w * grad1.magSq();
+    denom += part2.w * grad2.magSq();
+    denom += part3.w * grad3.magSq();
+    denom += part4.w * grad4.magSq();
+    
+    if (denom < this.epsilon) {
+      return;
     }
     
-    // Debug: reportar colisiones
-    // if (collisions > 0) {
-    //   console.log(`🔴 Esfera: ${collisions} colisiones detectadas`);
-    // }
+    // Aplicar regla PBD
+    let lambda = -this.C / denom;
+    lambda *= this.k_coef;
+    
+    if (!part1.bloqueada) {
+      part1.location.add(p5.Vector.mult(grad1, part1.w * lambda));
+    }
+    if (!part2.bloqueada) {
+      part2.location.add(p5.Vector.mult(grad2, part2.w * lambda));
+    }
+    if (!part3.bloqueada) {
+      part3.location.add(p5.Vector.mult(grad3, part3.w * lambda));
+    }
+    if (!part4.bloqueada) {
+      part4.location.add(p5.Vector.mult(grad4, part4.w * lambda));
+    }
   }
   
   display(scale_px) {
-    // Dibujar la esfera de colisión
-    push();
-    translate(scale_px * this.center.x, 
-              -scale_px * this.center.y, 
-              scale_px * this.center.z);
+    // No se visualiza.
+  }
+}
+
+// ============================================
+// CLASE SPHERECONTACTCONSTRAINT (Cubo ↔ Esfera)
+// ============================================
+class SphereContactConstraint extends Constraint {
+  constructor(particle, sphereParticle) {
+    super();
+    this.particle = particle;
+    this.sphere = sphereParticle;
+    this.epsilon = 1e-6;
+    this.stiffness = 1.0;
+    this.k_coef = 1.0;
     
-    // Color diferente si es dinámica (naranja) o estática (roja)
-    if (this.isDynamic) {
-      fill(255, 150, 50, 200); // Naranja semitransparente
-    } else {
-      fill(255, 100, 100, 150); // Rojo semitransparente
+    this.particles.push(particle);
+    this.particles.push(sphereParticle);
+  }
+  
+  proyecta_restriccion() {
+    if (!use_sphere_collision) {
+      return;
     }
-    noStroke();
-    sphere(scale_px * this.radius, 16, 16);
-    pop();
+    
+    let part = this.particle;
+    let sphere = this.sphere;
+    
+    if (!sphere.isSphere || !sphere.isReleased || !sphere.isDynamic) {
+      return;
+    }
+    
+    let delta = p5.Vector.sub(part.location, sphere.location);
+    let dist = delta.mag();
+    let radius = sphere.radius || 0;
+    
+    if (dist >= radius) {
+      return;
+    }
+    
+    let penetration = radius - dist;
+    let n;
+    if (dist < this.epsilon) {
+      n = createVector(0, 1, 0);
+    } else {
+      n = delta.mult(1.0 / dist);
+    }
+    
+    let w_p = part.bloqueada ? 0.0 : part.w;
+    let w_s = sphere.bloqueada ? 0.0 : sphere.w;
+    let w_sum = w_p + w_s;
+    
+    if (w_sum < this.epsilon) {
+      return;
+    }
+    
+    let corrMagnitude = penetration / w_sum;
+    part.inCollisionWithSphere = true;
+    
+    if (!part.bloqueada) {
+      part.location.add(p5.Vector.mult(n, w_p * corrMagnitude));
+    }
+    
+    if (!sphere.bloqueada) {
+      sphere.location.add(p5.Vector.mult(n, -w_s * corrMagnitude));
+    }
   }
 }
 
@@ -548,6 +580,7 @@ class AnchorConstraint extends Constraint {
     
     if (!part.bloqueada) {
       part.location.add(correction);
+      part.last_location = part.location.copy();
     }
   }
   
@@ -588,17 +621,19 @@ class PlaneCollision {
       let diff = p5.Vector.sub(p, this.point);
       let dist = diff.dot(this.normal);
       
-      // 3. Evaluar colisión: dist < 0 → partícula debajo del plano
-      if (dist >= 0) {
+      let offset = part.isSphere ? part.radius : 0.0;
+      
+      // 3. Evaluar colisión: dist < offset → partícula debajo del plano
+      if (dist >= offset) {
         continue; // No hay colisión
       }
       
       // 4. HAY COLISIÓN - Empujar partícula hacia arriba
-      // Corrección: Δp = -dist * normal (dist es negativo, -dist es positivo)
-      let correction = p5.Vector.mult(this.normal, -dist);
+      let correction = p5.Vector.mult(this.normal, offset - dist);
       
       // 5. Aplicar corrección de posición
       part.location.add(correction);
+      part.last_location = part.location.copy();
     }
   }
   

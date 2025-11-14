@@ -13,7 +13,8 @@
  * @param {number} stiffness - Rigidez base para todas las constraints (0-1)
  * @returns {Object} { particles: Array<Particle>, constraints: Array<Constraint> }
  */
-function createSoftBodyCube(center, size, resolution, mass, stiffness) {
+function createSoftBodyCube(center, size, resolution, mass, stiffness, options = {}) {
+  const { useVolumeConstraints = true } = options;
   // Validar parámetros
   if (resolution < 2) {
     console.warn("Resolution debe ser al menos 2, ajustando a 2");
@@ -26,6 +27,7 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness) {
   // Arrays para almacenar partículas y constraints
   let particles = [];
   let constraints = [];
+  let volumeCount = 0;
   
   // ============================================
   // 1. GENERAR PARTÍCULAS EN REJILLA 3D
@@ -46,6 +48,7 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness) {
   for (let i = 0; i < resolution; i++) {
     for (let j = 0; j < resolution; j++) {
       for (let k = 0; k < resolution; k++) {
+        let idx = getIndex(i, j, k);
         let x = centerVec.x + (i * spacing) - halfSize;
         let y = centerVec.y + (j * spacing) - halfSize;
         let z = centerVec.z + (k * spacing) - halfSize;
@@ -55,7 +58,8 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness) {
         let p = new Particle(pos, vel, mass);
         p.display_size = 0.05; // Tamaño pequeño para visualización
         
-        particles.push(p);
+        p.debugId = idx;
+        particles[idx] = p;
       }
     }
   }
@@ -217,10 +221,62 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness) {
   console.log(`✓ ${bendingCount} bending constraints creadas (separación de 2 unidades)`);
   
   // ============================================
+  // 5. VOLUME CONSTRAINTS (TETRAEDROS INTERNOS)
+  // ============================================
+  if (useVolumeConstraints) {
+    let volumeStiffness = constrain(stiffness * 0.6, 0.3, 0.7);
+    
+    function addVolumeConstraintFromIndices(i1, i2, i3, i4) {
+      let p1 = particles[i1];
+      let p2 = particles[i2];
+      let p3 = particles[i3];
+      let p4 = particles[i4];
+      
+      let restVolume = tetraVolume(p1.location, p2.location, p3.location, p4.location);
+      if (Math.abs(restVolume) < 1e-8) {
+        console.warn("⚠️ Tetraedro degenerado (volumen ≈ 0). Se omite constraint.");
+        return;
+      }
+      
+      let volumeConstraint = new VolumeConstraint(p1, p2, p3, p4, restVolume, volumeStiffness);
+      constraints.push(volumeConstraint);
+      volumeCount++;
+    }
+    
+    for (let i = 0; i < resolution - 1; i++) {
+      for (let j = 0; j < resolution - 1; j++) {
+        for (let k = 0; k < resolution - 1; k++) {
+          // Partículas del cubito local (2x2x2)
+          let a = getIndex(i, j, k);
+          let b = getIndex(i + 1, j, k);
+          let c = getIndex(i, j + 1, k);
+          let d = getIndex(i + 1, j + 1, k);
+          let e = getIndex(i, j, k + 1);
+          let f = getIndex(i + 1, j, k + 1);
+          let g = getIndex(i, j + 1, k + 1);
+          let h = getIndex(i + 1, j + 1, k + 1);
+          
+          // Partición estándar en 6 tetraedros
+          addVolumeConstraintFromIndices(a, b, c, e);
+          addVolumeConstraintFromIndices(b, c, g, f);
+          addVolumeConstraintFromIndices(c, g, h, e);
+          addVolumeConstraintFromIndices(a, c, h, e);
+          addVolumeConstraintFromIndices(a, f, b, e);
+          addVolumeConstraintFromIndices(f, g, b, e);
+        }
+      }
+    }
+    
+    console.log(`✓ ${volumeCount} volume constraints creadas (tetraedros internos, stiffness=${volumeStiffness.toFixed(2)})`);
+  } else {
+    console.log(`⚪ Volume constraints desactivadas para este cubo.`);
+  }
+  
+  // ============================================
   // RESUMEN Y RETORNO
   // ============================================
   
-  let totalConstraints = stretchCount + shearCount + bendingCount;
+  let totalConstraints = stretchCount + shearCount + bendingCount + volumeCount;
   console.log(`========================================`);
   console.log(`CUBO SOFT-BODY GENERADO (OPTIMIZADO)`);
   console.log(`Partículas: ${particles.length}`);
@@ -228,6 +284,7 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness) {
   console.log(`  - Stretch (vecinos directos): ${stretchCount}`);
   console.log(`  - Shear (caras externas, 2 diag): ${shearCount}`);
   console.log(`  - Bending (separación 2): ${bendingCount}`);
+  console.log(`  - Volume (tetraedros internos): ${volumeCount}`);
   console.log(`========================================`);
   
   return {
@@ -235,4 +292,15 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness) {
     constraints: constraints,
     resolution: resolution  // Retornar también la resolución
   };
+}
+
+// ============================================
+// UTILIDAD: VOLUMEN DE UN TETRAEDRO
+// ============================================
+function tetraVolume(p1, p2, p3, p4) {
+  let v21 = p5.Vector.sub(p2, p1);
+  let v31 = p5.Vector.sub(p3, p1);
+  let v41 = p5.Vector.sub(p4, p1);
+  let triple = v21.dot(p5.Vector.cross(v31, v41));
+  return triple / 6.0; // Signed volume; la magnitud indica volumen, el signo la orientación
 }

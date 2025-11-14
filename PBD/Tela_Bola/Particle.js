@@ -2,7 +2,7 @@
 // CLASE PARTICLE
 // ============================================
 class Particle {
-  constructor(l, v, ma) {
+  constructor(l, v, ma, options = {}) {
     this.acceleration = createVector(0.0, 0.0, 0.0);
     this.force = createVector(0.0, 0.0, 0.0);
     this.velocity = v.copy();
@@ -16,7 +16,15 @@ class Particle {
     this.w = 1.0 / ma;
     
     this.bloqueada = false;
-    this.display_size = 0.1;
+    this.display_size = options.displaySize || 0.1;
+    this.radius = options.radius || 0.0;
+    this.isSphere = options.isSphere || false;
+    this.isDynamic = options.isDynamic !== undefined ? options.isDynamic : true;
+    this.isReleased = this.isSphere ? !!options.isReleased : true;
+    
+    // Flags y datos de depuración
+    this.inCollisionWithSphere = false;
+    this.debugId = null;
   }
 
   set_bloqueada(bl) {
@@ -36,6 +44,14 @@ class Particle {
 
   // Method to update location
   update(dt) {
+    if (this.isSphere && (!this.isDynamic || !this.isReleased)) {
+      this.last_location = this.location.copy();
+      this.velocity.set(0, 0, 0);
+      this.acceleration.set(0, 0, 0);
+      this.force.set(0, 0, 0);
+      return;
+    }
+    
     // Actualizar la aceleración de la partícula con la fuerza actual
     this.acceleration.add(p5.Vector.mult(this.force, this.w));
     

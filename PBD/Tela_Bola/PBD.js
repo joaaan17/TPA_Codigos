@@ -1,3 +1,17 @@
+function createPBDSphereParticle(particleMass) {
+  let radius = sphere_radius_default;
+  let sphere_mass = particleMass * sphere_mass_multiplier;
+  let start_pos = createVector(0.0, sphere_drop_height, 0.0);
+  let vel = createVector(0, 0, 0);
+  let sphere = new Particle(start_pos, vel, sphere_mass, {
+    radius: radius,
+    isSphere: true,
+    isDynamic: true,
+    isReleased: false,
+    displaySize: radius
+  });
+  return sphere;
+}
 // ============================================
 // VARIABLES GLOBALES
 // ============================================
@@ -9,7 +23,9 @@ let vel_viento;
 
 // Variables para colisiones
 let groundPlane; // Plataforma (plano)
-let fallingSphere; // Esfera que cae sobre el cubo
+let sphereParticle = null; // Partícula-esfera integrada en el solver
+let sphere_radius_default = 0.22;
+let sphere_mass_multiplier = 20.0; // En relación a la masa de una partícula del cubo
 let sphere_drop_height = 4.5; // Altura desde donde cae la esfera (configurable) - 3m más arriba
 
 // Propiedades tela (optimizadas para rendimiento)
@@ -36,6 +52,13 @@ let use_anchors = true; // H: Controlar anclas de la base (mantiene cubo en posi
 let use_damping = true; // D: Controlar damping de Müller
 let use_plane_collision = true; // F: Controlar colisión con plano (Floor)
 let use_sphere_collision = true; // E: Controlar colisión con esfera
+let use_shape_matching = true; // K: Controlar Shape Matching (Müller 2005)
+let use_volume_constraints = true; // Control del método volumétrico
+let deformationMode = 'both'; // 'shape', 'volume', 'both', 'custom'
+let debug_rest_pose = false; // Modo especial para verificar estado de reposo
+const rest_pose_tolerance = 1e-5;
+const rest_pose_log_interval = 45;
+let last_rest_pose_log_frame = -Infinity;
 
 // ============================================
 // SETUP
@@ -45,6 +68,7 @@ function setup() {
   
   vel_viento = createVector(0, 0, 0);
   sphere_size_tela = ancho_tela / n_ancho_tela * 0.4;
+  applyDeformationModeSettings(false);
   
   if (use_cube_mode) {
     // MODO CUBO DEFORMABLE
@@ -54,7 +78,7 @@ function setup() {
     createClothMode();
   }
                     
-  system.set_n_iters(5); // Podemos permitirnos más iteraciones ahora
+  system.set_n_iters(20); // ✅ 20 iteraciones (suficiente con Shape Match antes de colisiones)
   
   // CONFIGURAR LISTENER DEL BOTÓN
   setupButtonListeners();
@@ -87,12 +111,97 @@ function setupButtonListeners() {
   } else {
     console.log("⚠️ Botón recreateCubeButton no encontrado");
   }
+  
+  // Selector para elegir el método de deformación
+  let deformationSelect = document.getElementById('deformationMode');
+  if (deformationSelect) {
+    deformationSelect.value = deformationMode;
+    deformationSelect.addEventListener('change', function() {
+      let selected = this.value;
+      
+      if (selected === 'custom') {
+        deformationMode = 'custom';
+        console.log("⚙️ Modo de deformación: PERSONALIZADO (controlado por teclas).");
+        updateDeformationModeLabel();
+        return;
+      }
+      
+      deformationMode = selected;
+      applyDeformationModeSettings(true);
+      console.log(`🎛️ Modo selecionado: ${getReadableDeformationMode()}. Recreando cubo...`);
+      recreateCubeWithNewResolution();
+    });
+  } else {
+    console.log("⚠️ Selector deformationMode no encontrado");
+  }
+}
+
+function applyDeformationModeSettings(logChanges = true) {
+  if (deformationMode === 'custom') {
+    updateDeformationModeLabel();
+    return;
+  }
+  
+  let prevShape = use_shape_matching;
+  let prevVolume = use_volume_constraints;
+  
+  if (deformationMode === 'shape') {
+    use_shape_matching = true;
+    use_volume_constraints = false;
+  } else if (deformationMode === 'volume') {
+    use_shape_matching = false;
+    use_volume_constraints = true;
+  } else {
+    // 'both'
+    use_shape_matching = true;
+    use_volume_constraints = true;
+  }
+  
+  if (logChanges && (prevShape !== use_shape_matching || prevVolume !== use_volume_constraints)) {
+    console.log(`🎚️ Aplicando modo de deformación: ${getReadableDeformationMode()}`);
+  }
+  
+  updateForceIndicators();
+  updateDeformationModeLabel();
+}
+
+function markDeformationModeAsCustom(reason) {
+  deformationMode = 'custom';
+  let deformationSelect = document.getElementById('deformationMode');
+  if (deformationSelect) {
+    deformationSelect.value = 'custom';
+  }
+  if (reason) {
+    console.log(reason);
+  }
+  updateDeformationModeLabel();
+}
+
+function getReadableDeformationMode() {
+  switch (deformationMode) {
+    case 'shape':
+      return 'Shape Matching';
+    case 'volume':
+      return 'Volumétrico';
+    case 'both':
+      return 'Ambos';
+    default:
+      return 'Personalizado';
+  }
+}
+
+function updateDeformationModeLabel() {
+  let modeEl = document.getElementById('force-mode');
+  if (!modeEl) return;
+  modeEl.textContent = getReadableDeformationMode();
+  modeEl.style.color = deformationMode === 'custom' ? '#ffcc66' : '#ffffff';
 }
 
 // ============================================
 // CREAR MODO TELA
 // ============================================
 function createClothMode() {
+  sphereParticle = null;
   system = crea_tela(alto_tela,
                     ancho_tela,
                     densidad_tela,
@@ -130,7 +239,7 @@ function createCubeMode() {
   // GENERAR CUBO SOFT-BODY con resolución configurable
   let cube_size = 0.8; // Tamaño: 0.8 metros
   // cube_resolution es variable global, se lee del selector
-  let cube_mass = 0.5; // ✅ AUMENTADO: 0.1 → 0.5 kg (más peso = más resistencia)
+  let cube_mass = 2.0; // ✅ AUMENTADO: 0.5 → 1.0 kg (mucho más pesado)
   let cube_stiffness = 0.98; // ✅ AUMENTADO: 0.8 → 0.98 (mucho más rígido)
   
   // POSICIONAR CUBO CON LA BASE EN EL PLANO (Y = 0)
@@ -146,7 +255,8 @@ function createCubeMode() {
     cube_size,
     cube_resolution,
     cube_mass,
-    cube_stiffness
+    cube_stiffness,
+    { useVolumeConstraints: use_volume_constraints }
   );
   
   // AÑADIR PARTÍCULAS AL SISTEMA
@@ -159,11 +269,23 @@ function createCubeMode() {
     system.add_constraint(softCube.constraints[i]);
   }
   
-  // ANCLAR LA BASE DEL CUBO AL PLANO (usando AnchorConstraints) - si está activado
+  // ✅ CRÍTICO: CREAR SHAPE MATCHING ANTES de anclas
+  // Capturar posiciones de reposo del cubo SIN deformaciones
+  if (use_shape_matching) {
+    let shapeMatchingStiffness = 0.3; // ✅ AUMENTADO: 0.05 → 0.3 (más firme, seguro ahora)
+    let shapeMatching = new ShapeMatching(softCube.particles, shapeMatchingStiffness);
+    system.set_shape_matching(shapeMatching);
+    console.log(`✨ Shape Matching configurado (stiffness=${shapeMatchingStiffness})`);
+  } else {
+    system.set_shape_matching(null);
+    console.log("⚪ Shape Matching desactivado para este cubo.");
+  }
+  
+  // ANCLAR LA BASE DEL CUBO AL PLANO (DESPUÉS de Shape Matching)
   let anchorsCount = 0;
   
   if (use_anchors) {
-    let anchorStiffness = 0.99; // ✅ AUMENTADO: 0.95 → 0.99 (anclas casi rígidas)
+    let anchorStiffness = 0.99; // Anclas casi rígidas
     
     for (let i = 0; i < cube_resolution; i++) {
       for (let k = 0; k < cube_resolution; k++) {
@@ -192,27 +314,33 @@ function createCubeMode() {
   groundPlane = new PlaneCollision(plane_point, plane_normal);
   system.add_collision_object(groundPlane);
   
-  // CREAR ESFERA QUE CAE (dinámica) - solo si no estamos en modo debug
-  if (!debug_mode) {
-    let sphere_radius = 0.25; // 25 cm de radio (aumentado para mayor deformación)
-    let sphere_start_pos = createVector(0.0, sphere_drop_height, 0.0);
-    fallingSphere = new SphereCollision(sphere_start_pos, sphere_radius, true); // true = dinámica
-    system.add_collision_object(fallingSphere);
-    console.log(`🔴 Esfera creada en altura ${sphere_drop_height}m`);
+  // CREAR ESFERA COMO PARTÍCULA PBD (solo si no estamos en modo debug)
+  sphereParticle = null;
+  if (!debug_mode && use_sphere) {
+    sphereParticle = createPBDSphereParticle(cube_mass);
+    system.particles.push(sphereParticle);
+    sphereParticle.debugId = system.particles.length - 1;
+    console.log(`🔴 Esfera PBD creada (radio=${sphereParticle.radius.toFixed(2)}m, masa=${sphereParticle.masa.toFixed(2)}kg)`);
+    
+    for (let i = 0; i < softCube.particles.length; i++) {
+      system.add_constraint(new SphereContactConstraint(softCube.particles[i], sphereParticle));
+    }
   } else {
-    console.log(`🔵 MODO DEBUG: Sin esfera, sin gravedad - Solo cubo en reposo`);
+    console.log(`🔵 MODO DEBUG: Sin esfera PBD - Solo cubo en reposo`);
   }
   
   console.log(`🟥 MODO CUBO - Posado y anclado al plano, listo para simular`);
+  console.log(`🎛️ Deformación activa: ${getReadableDeformationMode()} (Shape=${use_shape_matching ? "ON" : "OFF"}, Volume=${use_volume_constraints ? "ON" : "OFF"})`);
   
-  // Verificar estado de la esfera
-  if (fallingSphere) {
-    console.log(`🔴 Estado esfera: isDynamic=${fallingSphere.isDynamic}, isReleased=${fallingSphere.isReleased}`);
-    console.log(`📍 Posición esfera: (${fallingSphere.center.x}, ${fallingSphere.center.y}, ${fallingSphere.center.z})`);
+  if (sphereParticle) {
+    console.log(`🔴 Estado esfera: isReleased=${sphereParticle.isReleased}, masa=${sphereParticle.masa.toFixed(2)}kg`);
+    console.log(`📍 Posición esfera: (${sphereParticle.location.x.toFixed(3)}, ${sphereParticle.location.y.toFixed(3)}, ${sphereParticle.location.z.toFixed(3)})`);
   }
   
   // DIAGNÓSTICO: Imprimir primeras 10 constraints para verificar rest lengths
   diagnosticarConstraints();
+  updateForceIndicators();
+  updateDeformationModeLabel();
 }
 
 // ============================================
@@ -252,12 +380,10 @@ function diagnosticarConstraints() {
 function dropSphere() {
   console.log("🔴 Botón presionado - dropSphere() llamada");
   
-  if (!fallingSphere) {
-    console.log("⚠️ ERROR: fallingSphere no existe");
+  if (!sphereParticle) {
+    console.log("⚠️ ERROR: sphereParticle no existe");
     return;
   }
-  
-  console.log("✓ fallingSphere existe, isReleased =", fallingSphere.isReleased);
   
   // Leer altura del input HTML
   let heightInput = document.getElementById('dropHeight');
@@ -269,14 +395,14 @@ function dropSphere() {
   
   // Reset posición a la altura especificada
   let new_pos = createVector(0.0, sphere_drop_height, 0.0);
-  fallingSphere.reset(new_pos);
+  sphereParticle.location = new_pos.copy();
+  sphereParticle.last_location = new_pos.copy();
+  sphereParticle.velocity.set(0, 0, 0);
+  sphereParticle.force.set(0, 0, 0);
+  sphereParticle.isReleased = true;
+  sphereParticle.isDynamic = true;
   
-  console.log("📍 Posición reseteada a", new_pos);
-  
-  // SOLTAR la esfera (activa la física)
-  fallingSphere.release();
-  
-  console.log(`🔴 Esfera soltada - isReleased =`, fallingSphere.isReleased);
+  console.log("📍 Esfera lista en", new_pos);
 }
 
 // Hacer funciones accesibles globalmente para onclick
@@ -299,7 +425,7 @@ function recreateCubeWithNewResolution() {
   // Recrear el cubo
   if (use_cube_mode) {
     createCubeMode();
-    system.set_n_iters(10);
+    system.set_n_iters(20);
   }
 }
 
@@ -322,11 +448,14 @@ function aplica_viento() {
   let area = area_total / npart;
   
   for (let i = 0; i < npart; i++) {
+    let part = system.particles[i];
+    if (part.isSphere) continue;
+    
     let x = (0.5 + random(0.5)) * vel_viento.x * area;
     let y = (0.5 + random(0.5)) * vel_viento.y * area;
     let z = (0.5 + random(0.5)) * vel_viento.z * area;
     let fv = createVector(x, y, z); 
-    system.particles[i].force.add(fv);
+    part.force.add(fv);
   }
 }
 
@@ -339,19 +468,28 @@ function draw() {
   // Control de cámara orbital (usa el mouse para rotar)
   orbitControl();
   
-  // Actualizar esfera que cae (si existe, es dinámica y no estamos en modo debug)
-  // La esfera SÍ experimenta gravedad SIEMPRE (cuando es soltada)
-  if (fallingSphere && fallingSphere.isDynamic && !debug_mode && use_sphere) {
-    fallingSphere.update(dt, createVector(0.0, -9.81, 0.0));
-  }
-
   // NO aplicar gravedad al cubo - Eliminado completamente
   // El cubo se mantiene en posición gracias a las anclas (tecla H)
-  
+
+  if (!debug_rest_pose) {
   aplica_viento();
+  }
+  
+  if (sphereParticle && sphereParticle.isSphere && sphereParticle.isDynamic && sphereParticle.isReleased && !debug_mode && !debug_rest_pose) {
+    sphereParticle.force.add(createVector(0.0, -9.81 * sphereParticle.masa, 0.0));
+  }
 
   // Ejecutar solver PBD con fuerzas controlables individualmente
-  system.run(dt, use_damping, use_plane_collision, use_sphere_collision);  
+  let applyDamping = debug_rest_pose ? false : use_damping;
+  let applyPlaneCollision = debug_rest_pose ? false : use_plane_collision;
+  let applySphereCollision = debug_rest_pose ? false : use_sphere_collision;
+  let applyShapeMatching = debug_rest_pose ? false : use_shape_matching;
+  
+  system.run(dt, applyDamping, applyPlaneCollision, applySphereCollision, applyShapeMatching);
+  
+  if (debug_rest_pose) {
+    runRestPoseDiagnostics();
+  }
 
   display();
   stats();
@@ -385,13 +523,21 @@ function stats() {
 function updateForceIndicators() {
   // Actualizar indicadores de fuerzas en el panel
   let dampingEl = document.getElementById('force-damping');
+  let shapeMatchEl = document.getElementById('force-shapematch');
   let planeEl = document.getElementById('force-plane');
   let sphereEl = document.getElementById('force-sphere');
   let anchorsEl = document.getElementById('force-anchors');
+  let volumeEl = document.getElementById('force-volume');
+  let modeEl = document.getElementById('force-mode');
   
   if (dampingEl) {
     dampingEl.textContent = use_damping ? 'ON' : 'OFF';
     dampingEl.style.color = use_damping ? '#88ff88' : '#ff8888';
+  }
+  
+  if (shapeMatchEl) {
+    shapeMatchEl.textContent = use_shape_matching ? 'ON' : 'OFF';
+    shapeMatchEl.style.color = use_shape_matching ? '#88ff88' : '#ff8888';
   }
   
   if (planeEl) {
@@ -407,6 +553,16 @@ function updateForceIndicators() {
   if (anchorsEl) {
     anchorsEl.textContent = use_anchors ? 'ON' : 'OFF';
     anchorsEl.style.color = use_anchors ? '#88ff88' : '#ff8888';
+  }
+  
+  if (volumeEl) {
+    volumeEl.textContent = use_volume_constraints ? 'ON' : 'OFF';
+    volumeEl.style.color = use_volume_constraints ? '#88ff88' : '#ff8888';
+  }
+  
+  if (modeEl) {
+    modeEl.textContent = getReadableDeformationMode();
+    modeEl.style.color = deformationMode === 'custom' ? '#ffcc66' : '#ffffff';
   }
 }
 
@@ -425,10 +581,10 @@ function display() {
     // Solo dibujar si la constraint tiene al menos 2 partículas
     // (AnchorConstraint solo tiene 1, no se dibuja)
     if (c.particles.length >= 2) {
-      let p1 = c.particles[0].location;
-      let p2 = c.particles[1].location;
-      vertex(scale_px * p1.x, -scale_px * p1.y, scale_px * p1.z);
-      vertex(scale_px * p2.x, -scale_px * p2.y, scale_px * p2.z);
+    let p1 = c.particles[0].location;
+    let p2 = c.particles[1].location;
+    vertex(scale_px * p1.x, -scale_px * p1.y, scale_px * p1.z);
+    vertex(scale_px * p2.x, -scale_px * p2.y, scale_px * p2.z);
     }
   }
   endShape();
@@ -445,6 +601,17 @@ function display() {
               -scale_px * p.location.y,
               scale_px * p.location.z);
     sphere(size, 6, 6); // Esferas negras con detalle moderado
+    pop();
+  }
+  
+  if (sphereParticle) {
+    push();
+    translate(scale_px * sphereParticle.location.x,
+              -scale_px * sphereParticle.location.y,
+              scale_px * sphereParticle.location.z);
+    fill(255, 150, 50, 220);
+    noStroke();
+    sphere(scale_px * sphereParticle.radius, 20, 20);
     pop();
   }
   
@@ -476,8 +643,22 @@ function keyPressed() {
     // Recrear cubo para aplicar cambios
     if (use_cube_mode) {
       createCubeMode();
-      system.set_n_iters(5);
+      system.set_n_iters(20);
     }
+  }
+  
+  // ===== MODO DEBUG REST POSE =====
+  if (key === 'R' || key === 'r') {
+    toggleRestPoseMode();
+  }
+  
+  // ===== TOGGLE SHAPE MATCHING (Tecla K) =====
+  if (key === 'K' || key === 'k') {
+    use_shape_matching = !use_shape_matching;
+    console.log("✨ Shape Matching:", use_shape_matching ? "ON (mantiene forma)" : "OFF");
+    markDeformationModeAsCustom("⚙️ Shape Matching modificado manualmente (modo personalizado).");
+    updateForceIndicators();
+    mostrarEstadoFuerzas();
   }
   
   // ===== TOGGLE DAMPING DE MÜLLER =====
@@ -514,7 +695,7 @@ function keyPressed() {
     } else {
       createClothMode();
     }
-    system.set_n_iters(5);
+    system.set_n_iters(20);
   }
   
   // ===== TOGGLES DE RESTRICCIONES =====
@@ -532,7 +713,7 @@ function keyPressed() {
     // Recrear cubo
     if (use_cube_mode) {
       createCubeMode();
-      system.set_n_iters(5);
+      system.set_n_iters(20);
     }
     mostrarEstadoFuerzas();
   }
@@ -577,10 +758,113 @@ function mostrarEstadoFuerzas() {
   console.log("📊 ESTADO ACTUAL DE FUERZAS:");
   console.log("═".repeat(40));
   console.log(`  💨 Damping (Müller):  ${use_damping ? "ON ✓" : "OFF ✗"}`);
+  console.log(`  ✨ Shape Matching:    ${use_shape_matching ? "ON ✓" : "OFF ✗"}`);
+  console.log(`  🧱 Volume Constraints:${use_volume_constraints ? "ON ✓" : "OFF ✗"}`);
   console.log(`  🟩 Colisión Plano:    ${use_plane_collision ? "ON ✓" : "OFF ✗"}`);
   console.log(`  🔴 Colisión Esfera:   ${use_sphere_collision ? "ON ✓" : "OFF ✗"}`);
   console.log(`  🔒 Anclas (XZ):       ${use_anchors ? "ON ✓ (base fija)" : "OFF ✗ (cubo libre)"}`);
+  console.log(`  🎛️ Modo Deformación:  ${getReadableDeformationMode()}`);
+  console.log(`  💤 Debug Rest Pose:   ${debug_rest_pose ? "ON ✓" : "OFF ✗"}`);
   console.log("═".repeat(40) + "\n");
+}
+
+// ============================================
+// DEBUG REST POSE (sin fuerzas externas)
+// ============================================
+function toggleRestPoseMode() {
+  debug_rest_pose = !debug_rest_pose;
+  last_rest_pose_log_frame = -Infinity;
+  console.log("=".repeat(50));
+  console.log(debug_rest_pose ? "🛌 REST POSE MODE: ON (sin plano, sin esfera, sin viento)" :
+                                "🛌 REST POSE MODE: OFF");
+  console.log("=".repeat(50));
+  if (debug_rest_pose) {
+    console.log("Objetivo: el cubo debe quedarse completamente quieto solo con sus constraints.");
+    console.log("Si detecto movimiento residual, imprimiré los primeros constraints y tetraedros.");
+  }
+}
+
+function runRestPoseDiagnostics() {
+  if (!system || !system.particles) return;
+  
+  let maxDelta = 0;
+  for (let i = 0; i < system.particles.length; i++) {
+    let p = system.particles[i];
+    let delta = p5.Vector.sub(p.location, p.last_location).mag();
+    if (delta > maxDelta) {
+      maxDelta = delta;
+    }
+  }
+  
+  if (maxDelta > rest_pose_tolerance && frameCount - last_rest_pose_log_frame >= rest_pose_log_interval) {
+    last_rest_pose_log_frame = frameCount;
+    console.log("\n" + "🔍 REST POSE DIAGNOSTIC".padEnd(40, " "));
+    console.log(`   Movimiento residual max: ${maxDelta.toExponential(3)} m`);
+    logRestPoseSnapshot();
+  }
+}
+
+function logRestPoseSnapshot() {
+  if (!system || !system.constraints) return;
+  let logged = 0;
+  let limit = 10;
+  console.log("   Primeras constraints:");
+  for (let i = 0; i < system.constraints.length && logged < limit; i++) {
+    let c = system.constraints[i];
+    if (c instanceof DistanceConstraint) {
+      logDistanceConstraintInfo(c, i);
+      logged++;
+    } else if (c instanceof VolumeConstraint) {
+      logVolumeConstraintInfo(c, i);
+      logged++;
+    }
+  }
+}
+
+function logDistanceConstraintInfo(constraint, idx) {
+  let part1 = constraint.particles[0];
+  let part2 = constraint.particles[1];
+  let current = p5.Vector.dist(part1.location, part2.location);
+  let diff = current - constraint.d;
+  console.log(`     [C${idx}] Distance (${getParticleDebugId(part1)}, ${getParticleDebugId(part2)}) `
+    + `rest=${constraint.d.toFixed(6)} current=${current.toFixed(6)} diff=${diff.toExponential(3)}`);
+}
+
+function logVolumeConstraintInfo(constraint, idx) {
+  let parts = constraint.particles;
+  let current = computeSignedTetraVolume(
+    parts[0].location,
+    parts[1].location,
+    parts[2].location,
+    parts[3].location
+  );
+  let diff = current - constraint.restVolume;
+  console.log(`     [C${idx}] Volume (${getParticleDebugId(parts[0])}, ${getParticleDebugId(parts[1])}, `
+    + `${getParticleDebugId(parts[2])}, ${getParticleDebugId(parts[3])}) `
+    + `rest=${constraint.restVolume.toExponential(3)} current=${current.toExponential(3)} `
+    + `C=${diff.toExponential(3)}`);
+}
+
+function getParticleDebugId(particle) {
+  if (particle && particle.debugId !== null && particle.debugId !== undefined) {
+    return particle.debugId;
+  }
+  if (!system || !system.particles) {
+    return "?";
+  }
+  let idx = system.particles.indexOf(particle);
+  return idx >= 0 ? idx : "?";
+}
+
+function computeSignedTetraVolume(p1, p2, p3, p4) {
+  if (typeof tetraVolume === "function") {
+    return tetraVolume(p1, p2, p3, p4);
+  }
+  // Fallback si la función no está disponible (no debería ocurrir)
+  let v21 = p5.Vector.sub(p2, p1);
+  let v31 = p5.Vector.sub(p3, p1);
+  let v41 = p5.Vector.sub(p4, p1);
+  return v21.dot(p5.Vector.cross(v31, v41)) / 6.0;
 }
 
 // ============================================
@@ -603,6 +887,6 @@ function recrearTela() {
   // Re-añadir plataforma
   system.add_collision_object(groundPlane);
   
-  system.set_n_iters(5);
+  system.set_n_iters(20);
 }
 

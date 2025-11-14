@@ -10,6 +10,9 @@ class PBDSystem {
     
     this.niters = 5;
     
+    // Shape Matching (opcional, para soft-bodies)
+    this.shapeMatching = null;
+    
     let p = createVector(0, 0, 0);
     let v = createVector(0, 0, 0);
  
@@ -33,36 +36,42 @@ class PBDSystem {
   add_collision_object(obj) {
     this.collisionObjects.push(obj);
   }
+  
+  set_shape_matching(shapeMatching) {
+    this.shapeMatching = shapeMatching;
+  }
 
-  run(dt, apply_damping = true, use_plane_col = true, use_sphere_col = true) {
+  run(dt, apply_damping = true, use_plane_col = true, use_sphere_col = true, use_shape_matching = true) {
     // Simulación PBD según Müller et al.
     
     // 1. Predicción de posiciones (integración explícita)
     for (let i = 0; i < this.particles.length; i++) {
       this.particles[i].update(dt);
     }
+    
+    for (let i = 0; i < this.particles.length; i++) {
+      this.particles[i].inCollisionWithSphere = false;
+    }
 
+    let shapeMatchingIterations = Math.max(1, Math.floor(this.niters * 0.3));
+    
     // 2. Bucle de solver de restricciones
     for (let it = 0; it < this.niters; it++) {
-      // 2a. Resolver todas las restricciones internas (distance, bending, shear)
-      for (let i = 0; i < this.constraints.length; i++) {
-        this.constraints[i].proyecta_restriccion();
+      // 2a. Resolver restricciones internas en orden específico
+      this.projectConstraintsOfType(DistanceConstraint);
+      this.projectConstraintsOfType(ShearConstraint);
+      this.projectConstraintsOfType(BendingConstraint);
+      this.projectConstraintsOfType(VolumeConstraint);
+      this.projectConstraintsOfType(AnchorConstraint);
+      this.projectConstraintsOfType(SphereContactConstraint, use_sphere_col);
+      
+      // 2b. APLICAR SHAPE MATCHING (Müller 2005) en primeras iteraciones
+      if (this.shapeMatching && use_shape_matching && it < shapeMatchingIterations) {
+        this.shapeMatching.apply();
       }
       
-      // 2b. Resolver colisiones con objetos externos (controlables individualmente)
-      for (let i = 0; i < this.collisionObjects.length; i++) {
-        let obj = this.collisionObjects[i];
-        
-        // Verificar tipo de objeto y si está activado
-        if (obj.constructor.name === 'PlaneCollision' && !use_plane_col) {
-          continue; // Saltar colisión con plano si está desactivada
-        }
-        if (obj.constructor.name === 'SphereCollision' && !use_sphere_col) {
-          continue; // Saltar colisión con esfera si está desactivada
-        }
-        
-        obj.project(this.particles);
-      }
+      // 2c. Resolver colisiones SIEMPRE al final de la iteración
+      this.projectCollisions(use_plane_col);
     }
      
     // 3. Actualizar velocidades basándose en el cambio de posición
@@ -74,6 +83,30 @@ class PBDSystem {
     // 4. APLICAR DAMPING GLOBAL (según Müller07, preserva movimiento rígido)
     if (apply_damping) {
       this.applyGlobalDamping(0.1); // k_damping reducido a 0.1 (más suave)
+    }
+  }
+
+  projectConstraintsOfType(typeClass, enabled = true) {
+    if (!enabled || typeof typeClass === 'undefined') {
+      return;
+    }
+    for (let i = 0; i < this.constraints.length; i++) {
+      let constraint = this.constraints[i];
+      if (constraint instanceof typeClass) {
+        constraint.proyecta_restriccion();
+      }
+    }
+  }
+  
+  projectCollisions(use_plane_col) {
+    for (let i = 0; i < this.collisionObjects.length; i++) {
+      let obj = this.collisionObjects[i];
+      
+      if (obj.constructor.name === 'PlaneCollision' && !use_plane_col) {
+        continue;
+      }
+      
+      obj.project(this.particles);
     }
   }
   
