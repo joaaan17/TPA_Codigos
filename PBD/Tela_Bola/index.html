@@ -102,6 +102,15 @@
                     <option value="custom">Personalizado (teclas)</option>
                 </select>
             </div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                <label for="cubePreset" style="color: #ffffff;">Rigidez:</label>
+                <select id="cubePreset"
+                        style="padding: 3px; background-color: #333; color: white; border: 1px solid #666; border-radius: 3px; pointer-events: auto; cursor: pointer;">
+                    <option value="soft">Muy blando</option>
+                    <option value="medium" selected>Medio sólido</option>
+                    <option value="rigid">Casi rígido</option>
+                </select>
+            </div>
             <div style="font-size: 11px; color: #d7e1ff; margin-bottom: 5px;">Al cambiar el método se recrea el cubo automáticamente.</div>
             <button id="recreateCubeButton" 
                     style="width: 100%; padding: 6px; background-color: #6699ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; pointer-events: auto;">
@@ -132,14 +141,6 @@
         <div>ESPACIO - Soltar</div>
         <div style="margin-top: 5px; color: #ff88ff;"><strong>🎮 Modo:</strong></div>
         <div>M - Cambiar Tela/Cubo</div>
-        <div style="margin-top: 5px; color: #88ccff;"><strong>🔧 Fuerzas (toggle ON/OFF):</strong></div>
-        <div style="font-size: 12px;">P - Modo Debug (sin esfera)</div>
-        <div style="font-size: 12px;">D - Damping (Müller)</div>
-        <div style="font-size: 12px; color: #ffcc88;">K - Shape Matching ✨</div>
-        <div style="font-size: 12px;">F - Colisión Plano</div>
-        <div style="font-size: 12px;">E - Colisión Esfera</div>
-        <div style="font-size: 12px;">H - Anclas (fija base XZ)</div>
-        <div style="font-size: 12px; color: #ffff88;">I - Ver Estado Fuerzas</div>
         <div style="margin-top: 5px; color: #aaaaff;"><strong>Restricciones:</strong></div>
         <div>B - Toggle Bending</div>
         <div style="margin-top: 5px; color: #aaffaa;"><strong>Viento:</strong></div>

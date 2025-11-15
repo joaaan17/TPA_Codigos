@@ -29,6 +29,57 @@ let sphere_radius_default = 0.22;
 let sphere_mass_multiplier = 40.0; // Mayor masa relativa para impactos más fuertes
 let sphere_drop_height = 4.5; // Altura desde donde cae la esfera (configurable) - 3m más arriba
 
+const SimulationMode = Object.freeze({
+  PBD: 'pbd',
+  Legacy: 'legacy',
+  TwoWayCoupling: 'twoWayCoupling'
+});
+
+let simulationMode = SimulationMode.PBD;
+let use_sphere_particle = simulationMode === SimulationMode.PBD;
+const twoWayCouplingSettings = {
+  impulseClamp: 120.0,
+  impulseDamping: 0.05
+};
+
+const cubeRigidityPresets = {
+  soft: {
+    id: 'soft',
+    label: 'Muy blando',
+    distanceStiffness: 0.28,
+    bendingStiffness: 0.012,
+    shearStiffness: 0.03,
+    cubeMass: 0.8,
+    shapeMatchingStiffness: 0.12,
+    volumeStiffness: 0.28
+  },
+  medium: {
+    id: 'medium',
+    label: 'Medio sólido',
+    distanceStiffness: 0.75,
+    bendingStiffness: 0.1,
+    shearStiffness: 0.1,
+    cubeMass: 2.0,
+    shapeMatchingStiffness: 0.32,
+    volumeStiffness: 0.58
+  },
+  rigid: {
+    id: 'rigid',
+    label: 'Casi rígido',
+    distanceStiffness: 0.92,
+    bendingStiffness: 0.2,
+    shearStiffness: 0.18,
+    cubeMass: 3.8,
+    shapeMatchingStiffness: 0.6,
+    volumeStiffness: 0.85
+  }
+};
+
+let cubeRigidityPresetId = 'medium';
+let shape_matching_stiffness = 0.32;
+let cube_particle_mass = 2.0;
+let volume_stiffness_override = 0.58;
+
 // Propiedades tela (optimizadas para rendimiento)
 let ancho_tela = 2.0;  // 2 metros de ancho
 let alto_tela = 2.0;   // 2 metros de alto
@@ -36,9 +87,9 @@ let n_ancho_tela = 15; // Aumentamos ahora que arreglamos el rendering
 let n_alto_tela = 15;  // 15x15 = 225 partículas
 let densidad_tela = 0.1; // kg/m^2 Podría ser tela gruesa de algodón, 100g/m^2
 let sphere_size_tela;
-let stiffness = 0.98;  // Aumentado para tela más rígida
-let bending_stiffness = 0.1; // Rigidez de las restricciones de bending
-let shear_stiffness = 0.1; // Rigidez de las restricciones de shear
+let stiffness = cubeRigidityPresets.medium.distanceStiffness;
+let bending_stiffness = cubeRigidityPresets.medium.bendingStiffness;
+let shear_stiffness = cubeRigidityPresets.medium.shearStiffness;
 let use_bending = true; // Activar/desactivar restricciones de bending
 let use_shear = true; // Activar/desactivar restricciones de shear
 
@@ -53,7 +104,6 @@ let use_anchors = true; // H: Controlar anclas de la base (mantiene cubo en posi
 let use_damping = true; // D: Controlar damping de Müller
 let use_plane_collision = true; // F: Controlar colisión con plano (Floor)
 let use_sphere_collision = true; // E: Controlar colisión con esfera
-let use_sphere_particle = true; // nuevo botón para activar/desactivar comportamiento PBD de la bola
 let use_shape_matching = true; // K: Controlar Shape Matching (Müller 2005)
 let use_volume_constraints = true; // Control del método volumétrico
 let deformationMode = 'both'; // 'shape', 'volume', 'both', 'custom'
@@ -61,6 +111,40 @@ let debug_rest_pose = false; // Modo especial para verificar estado de reposo
 const rest_pose_tolerance = 1e-5;
 const rest_pose_log_interval = 45;
 let last_rest_pose_log_frame = -Infinity;
+
+function applyCubePreset(presetId, logChanges = false, skipUIUpdate = false) {
+  let preset = cubeRigidityPresets[presetId] || cubeRigidityPresets.medium;
+  cubeRigidityPresetId = preset.id;
+  stiffness = preset.distanceStiffness;
+  bending_stiffness = preset.bendingStiffness;
+  shear_stiffness = preset.shearStiffness;
+  cube_particle_mass = preset.cubeMass;
+  shape_matching_stiffness = preset.shapeMatchingStiffness;
+  volume_stiffness_override = preset.volumeStiffness;
+  
+  if (logChanges) {
+    console.log(`🧊 Preset de rigidez seleccionado: ${preset.label}`);
+  }
+  
+  if (!skipUIUpdate) {
+    updateCubePresetSelector();
+  }
+}
+
+function getCubePresetLabel() {
+  return cubeRigidityPresets[cubeRigidityPresetId]
+    ? cubeRigidityPresets[cubeRigidityPresetId].label
+    : cubeRigidityPresets.medium.label;
+}
+
+function updateCubePresetSelector() {
+  let presetSelect = document.getElementById('cubePreset');
+  if (presetSelect) {
+    presetSelect.value = cubeRigidityPresetId;
+  }
+}
+
+applyCubePreset(cubeRigidityPresetId, false, true);
 
 // ============================================
 // SETUP
@@ -117,10 +201,11 @@ function setupButtonListeners() {
   let toggleSphereModeButton = document.getElementById('toggleSphereModeButton');
   if (toggleSphereModeButton) {
     toggleSphereModeButton.addEventListener('click', function() {
-      use_sphere_particle = !use_sphere_particle;
-      console.log(`🎛️ Modo bola PBD: ${use_sphere_particle ? "ON (corrección simétrica)" : "OFF (modo clásico)"}`);
-      recreateCubeWithNewResolution();
+      cycleSimulationMode();
     });
+    updateSphereModeIndicator();
+  } else {
+    console.log("⚠️ Botón toggleSphereModeButton no encontrado");
   }
   
   // Selector para elegir el método de deformación
@@ -144,6 +229,65 @@ function setupButtonListeners() {
     });
   } else {
     console.log("⚠️ Selector deformationMode no encontrado");
+  }
+  
+  let cubePresetSelect = document.getElementById('cubePreset');
+  if (cubePresetSelect) {
+    cubePresetSelect.value = cubeRigidityPresetId;
+    cubePresetSelect.addEventListener('change', function() {
+      applyCubePreset(this.value, true);
+      recreateCubeWithNewResolution();
+    });
+  } else {
+    console.log("⚠️ Selector cubePreset no encontrado");
+  }
+}
+
+function cycleSimulationMode() {
+  let nextMode;
+  if (simulationMode === SimulationMode.PBD) {
+    nextMode = SimulationMode.Legacy;
+  } else if (simulationMode === SimulationMode.Legacy) {
+    nextMode = SimulationMode.TwoWayCoupling;
+  } else {
+    nextMode = SimulationMode.PBD;
+  }
+  setSimulationMode(nextMode, true);
+  recreateCubeWithNewResolution();
+}
+
+function setSimulationMode(mode, logChange = false) {
+  if (!Object.values(SimulationMode).includes(mode)) {
+    mode = SimulationMode.PBD;
+  }
+  simulationMode = mode;
+  use_sphere_particle = (simulationMode === SimulationMode.PBD);
+  
+  if (logChange) {
+    console.log(`🎛️ Nuevo modo de esfera: ${getReadableSphereMode()}`);
+  }
+  
+  updateSphereModeIndicator();
+  updateForceIndicators();
+}
+
+function getReadableSphereMode() {
+  switch (simulationMode) {
+    case SimulationMode.PBD:
+      return 'PBD (simétrico)';
+    case SimulationMode.Legacy:
+      return 'Legacy';
+    case SimulationMode.TwoWayCoupling:
+      return 'Two-Way';
+    default:
+      return 'Desconocido';
+  }
+}
+
+function updateSphereModeIndicator() {
+  let toggleButton = document.getElementById('toggleSphereModeButton');
+  if (toggleButton) {
+    toggleButton.textContent = `MODO BOLA: ${getReadableSphereMode()}`;
   }
 }
 
@@ -265,8 +409,8 @@ function createCubeMode() {
   // GENERAR CUBO SOFT-BODY con resolución configurable
   let cube_size = 0.8; // Tamaño: 0.8 metros
   // cube_resolution es variable global, se lee del selector
-  let cube_mass = 2.0; // Masa por partícula
-  let cube_stiffness = 0.8; // Menos rígido para permitir más deformación
+  let cube_mass = cube_particle_mass;
+  let cube_stiffness = stiffness;
   
   // POSICIONAR CUBO CON LA BASE EN EL PLANO (Y = 0)
   // Centro en Y = cube_size/2 para que la base esté en Y = 0
@@ -282,7 +426,10 @@ function createCubeMode() {
     cube_resolution,
     cube_mass,
     cube_stiffness,
-    { useVolumeConstraints: use_volume_constraints }
+    {
+      useVolumeConstraints: use_volume_constraints,
+      volumeStiffnessOverride: volume_stiffness_override
+    }
   );
   
   // AÑADIR PARTÍCULAS AL SISTEMA
@@ -298,7 +445,7 @@ function createCubeMode() {
   // ✅ CRÍTICO: CREAR SHAPE MATCHING ANTES de anclas
   // Capturar posiciones de reposo del cubo SIN deformaciones
   if (use_shape_matching) {
-    let shapeMatchingStiffness = 0.3; // ✅ AUMENTADO: 0.05 → 0.3 (más firme, seguro ahora)
+    let shapeMatchingStiffness = shape_matching_stiffness;
     let shapeMatching = new ShapeMatching(softCube.particles, shapeMatchingStiffness);
     system.set_shape_matching(shapeMatching);
     console.log(`✨ Shape Matching configurado (stiffness=${shapeMatchingStiffness})`);
@@ -343,7 +490,7 @@ function createCubeMode() {
   sphereParticle = null;
   fallingSphere = null;
   if (!debug_mode && use_sphere) {
-    if (use_sphere_particle) {
+    if (simulationMode === SimulationMode.PBD) {
       sphereParticle = createPBDSphereParticle(cube_mass);
       system.particles.push(sphereParticle);
       sphereParticle.debugId = system.particles.length - 1;
@@ -355,9 +502,21 @@ function createCubeMode() {
     } else {
       let sphere_radius = sphere_radius_default;
       let sphere_start_pos = createVector(0.0, sphere_drop_height, 0.0);
-      fallingSphere = new LegacySphereCollision(sphere_start_pos, sphere_radius, true);
+      let enableTwoWay = simulationMode === SimulationMode.TwoWayCoupling;
+      let rigidMass = cube_mass * sphere_mass_multiplier;
+      fallingSphere = new LegacySphereCollision(
+        sphere_start_pos,
+        sphere_radius,
+        true,
+        {
+          mass: rigidMass,
+          enableTwoWayCoupling: enableTwoWay,
+          maxImpulse: enableTwoWay ? twoWayCouplingSettings.impulseClamp : 0.0,
+          impulseDamping: enableTwoWay ? twoWayCouplingSettings.impulseDamping : 0.0
+        }
+      );
       system.add_collision_object(fallingSphere);
-      console.log("🔴 Esfera rígida clásica creada (modo legacy).");
+      console.log(enableTwoWay ? "🔄 Esfera legacy (Two-Way Coupling) creada." : "🔴 Esfera rígida clásica creada (modo legacy).");
     }
   } else {
     console.log(`🔵 MODO DEBUG: Sin esfera - Solo cubo en reposo`);
@@ -365,6 +524,7 @@ function createCubeMode() {
   
   console.log(`🟥 MODO CUBO - Posado y anclado al plano, listo para simular`);
   console.log(`🎛️ Deformación activa: ${getReadableDeformationMode()} (Shape=${use_shape_matching ? "ON" : "OFF"}, Volume=${use_volume_constraints ? "ON" : "OFF"})`);
+  console.log(`🧊 Rigidez actual: ${getCubePresetLabel()} (stiffness=${stiffness.toFixed(2)}, masa=${cube_mass.toFixed(2)}kg)`);
   
   if (sphereParticle) {
     console.log(`🔴 Estado esfera: isReleased=${sphereParticle.isReleased}, masa=${sphereParticle.masa.toFixed(2)}kg`);
@@ -614,8 +774,14 @@ function updateForceIndicators() {
   }
   
   if (sphereModeEl) {
-    sphereModeEl.textContent = use_sphere_particle ? 'PBD' : 'LEGACY';
-    sphereModeEl.style.color = use_sphere_particle ? '#88ff88' : '#ffcc66';
+    sphereModeEl.textContent = getReadableSphereMode();
+    let color = '#88ff88';
+    if (simulationMode === SimulationMode.Legacy) {
+      color = '#ffcc66';
+    } else if (simulationMode === SimulationMode.TwoWayCoupling) {
+      color = '#66ddff';
+    }
+    sphereModeEl.style.color = color;
   }
 }
 
@@ -820,7 +986,7 @@ function mostrarEstadoFuerzas() {
   console.log(`  🔴 Colisión Esfera:   ${use_sphere_collision ? "ON ✓" : "OFF ✗"}`);
   console.log(`  🔒 Anclas (XZ):       ${use_anchors ? "ON ✓ (base fija)" : "OFF ✗ (cubo libre)"}`);
   console.log(`  🎛️ Modo Deformación:  ${getReadableDeformationMode()}`);
-  console.log(`  ⚽ Modo Bola:         ${use_sphere_particle ? "PBD (simétrica)" : "LEGACY (sólo cubo)"}`);
+  console.log(`  ⚽ Modo Bola:         ${getReadableSphereMode()}`);
   console.log(`  💤 Debug Rest Pose:   ${debug_rest_pose ? "ON ✓" : "OFF ✗"}`);
   console.log("═".repeat(40) + "\n");
 }

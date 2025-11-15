@@ -71,7 +71,7 @@ class PBDSystem {
       }
       
       // 2c. Resolver colisiones SIEMPRE al final de la iteración
-      this.projectCollisions(use_plane_col, use_sphere_col);
+      this.projectCollisions(use_plane_col, use_sphere_col, dt);
     }
      
     // 3. Actualizar velocidades basándose en el cambio de posición
@@ -98,7 +98,7 @@ class PBDSystem {
     }
   }
   
-  projectCollisions(use_plane_col, use_sphere_col) {
+  projectCollisions(use_plane_col, use_sphere_col, dt) {
     for (let i = 0; i < this.collisionObjects.length; i++) {
       let obj = this.collisionObjects[i];
       
@@ -109,7 +109,9 @@ class PBDSystem {
         continue;
       }
       
-      obj.project(this.particles);
+      if (typeof obj.project === 'function') {
+        obj.project(this.particles, dt);
+      }
     }
   }
   

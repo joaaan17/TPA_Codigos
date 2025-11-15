@@ -14,7 +14,10 @@
  * @returns {Object} { particles: Array<Particle>, constraints: Array<Constraint> }
  */
 function createSoftBodyCube(center, size, resolution, mass, stiffness, options = {}) {
-  const { useVolumeConstraints = true } = options;
+  const {
+    useVolumeConstraints = true,
+    volumeStiffnessOverride = null
+  } = options;
   // Validar parámetros
   if (resolution < 2) {
     console.warn("Resolution debe ser al menos 2, ajustando a 2");
@@ -224,7 +227,9 @@ function createSoftBodyCube(center, size, resolution, mass, stiffness, options =
   // 5. VOLUME CONSTRAINTS (TETRAEDROS INTERNOS)
   // ============================================
   if (useVolumeConstraints) {
-    let volumeStiffness = constrain(stiffness * 0.6, 0.3, 0.7);
+    let volumeStiffness = volumeStiffnessOverride !== null
+      ? volumeStiffnessOverride
+      : constrain(stiffness * 0.6, 0.3, 0.7);
     
     function addVolumeConstraintFromIndices(i1, i2, i3, i4) {
       let p1 = particles[i1];

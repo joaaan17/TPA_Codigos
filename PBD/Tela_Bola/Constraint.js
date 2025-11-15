@@ -547,13 +547,18 @@ class SphereContactConstraint extends Constraint {
 // CLASE LEGACYSPHERECOLLISION (Modo clásico)
 // ============================================
 class LegacySphereCollision {
-  constructor(center, radius, isDynamic = false) {
+  constructor(center, radius, isDynamic = false, options = {}) {
     this.center = center.copy();
     this.radius = radius;
     this.isDynamic = isDynamic;
     this.velocity = createVector(0, 0, 0);
     this.isReleased = false;
     this.epsilon = 0.0001;
+    this.mass = options.mass || 1.0;
+    this.enableTwoWayCoupling = options.enableTwoWayCoupling || false;
+    this.maxImpulse = options.maxImpulse || 0.0;
+    this.impulseDamping = options.impulseDamping || 0.0;
+    this.lastDt = 1.0 / 60.0;
   }
   
   update(dt, gravity) {
@@ -578,7 +583,8 @@ class LegacySphereCollision {
     this.isReleased = false;
   }
   
-  project(particles) {
+  project(particles, dt = 0.016) {
+    this.lastDt = dt;
     for (let i = 0; i < particles.length; i++) {
       particles[i].inCollisionWithSphere = false;
     }
@@ -606,11 +612,65 @@ class LegacySphereCollision {
         n = dir.normalize();
       }
       
-      let C = dist - (this.radius + safetyMargin);
-      let correction = p5.Vector.mult(n, -C);
-      part.location.add(correction);
-      part.last_location = part.location.copy();
+      let penetration = (this.radius + safetyMargin) - dist;
+      if (penetration <= 0) {
+        continue;
+      }
+      
+      let w_p = part.bloqueada ? 0.0 : part.w;
+      let w_s = (this.enableTwoWayCoupling && this.mass > this.epsilon) ? (1.0 / this.mass) : 0.0;
+      let w_sum = w_p + w_s;
+      if (w_sum < this.epsilon) {
+        continue;
+      }
+      
+      let particleCorr = p5.Vector.mult(n, penetration * (w_p / w_sum));
+      let sphereCorr = p5.Vector.mult(n, penetration * (w_s / w_sum));
+      
+      if (!part.bloqueada) {
+        part.location.add(particleCorr);
+        part.last_location = part.location.copy();
+      }
+      if (w_s > 0.0) {
+        this.center.sub(sphereCorr);
+      }
+      
       part.inCollisionWithSphere = true;
+      this.applyTwoWayImpulse(part, particleCorr, dt);
+    }
+  }
+  
+  applyTwoWayImpulse(part, correction, dt) {
+    if (!this.enableTwoWayCoupling) {
+      return;
+    }
+    
+    if (!this.isDynamic || !this.isReleased) {
+      return;
+    }
+    
+    if (dt <= 1e-6) {
+      return;
+    }
+    
+    let particleMass = part.masa || 0.0;
+    if (particleMass <= 0.0) {
+      return;
+    }
+    
+    // Δp_i = correction. Impulso J = (m_i * Δp_i) / dt (Müller 2007, Sec. 4.2)
+    let impulse = p5.Vector.mult(correction, particleMass / dt);
+    let mag = impulse.mag();
+    
+    if (this.maxImpulse > 0 && mag > this.maxImpulse) {
+      impulse.mult(this.maxImpulse / mag);
+    }
+    
+    let deltaV = p5.Vector.div(impulse, this.mass);
+    this.velocity.add(deltaV);
+    
+    if (this.impulseDamping > 0) {
+      this.velocity.mult(1.0 - this.impulseDamping);
     }
   }
   
@@ -689,7 +749,7 @@ class PlaneCollision {
    * 
    * @param {Array} particles - Array de partículas del sistema
    */
-  project(particles) {
+  project(particles, dt = 0.016) {
     for (let i = 0; i < particles.length; i++) {
       let part = particles[i];
       
