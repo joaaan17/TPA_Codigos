@@ -220,6 +220,12 @@ class PBD_CLOTH_PT_Panel(bpy.types.Panel):
             box.operator("pbd_cloth.reset_simulando", text="Reset Estado")
         else:
             box.operator("pbd_cloth.simular_shapekeys", text="Simular y Guardar en Shape Keys", icon='PLAY')
+        
+        # Botón de diagnóstico
+        box = layout.box()
+        box.label(text="Diagnóstico:", icon='CONSOLE')
+        box.operator("pbd_cloth.diagnosticar_keyframes", text="Diagnosticar Keyframes", icon='GRAPH')
+        box.operator("pbd_cloth.forzar_actualizacion", text="Forzar Actualización", icon='FILE_REFRESH')
 
 
 # ============================================
@@ -252,6 +258,62 @@ class PBD_CLOTH_OT_ResetSimulando(bpy.types.Operator):
         context.scene.pbd_cloth_is_simulating = False
         self.report({'INFO'}, "Estado de simulación reseteado")
         return {'FINISHED'}
+
+
+class PBD_CLOTH_OT_DiagnosticarKeyframes(bpy.types.Operator):
+    """Operador para diagnosticar los keyframes de Shape Keys"""
+    bl_idname = "pbd_cloth.diagnosticar_keyframes"
+    bl_label = "Diagnosticar Keyframes"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        try:
+            diagnosticar_keyframes_shapekeys()
+            self.report({'INFO'}, "Diagnóstico completado. Revisa la consola.")
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
+
+
+class PBD_CLOTH_OT_ForzarActualizacion(bpy.types.Operator):
+    """Operador para forzar la actualización del mesh y Shape Keys"""
+    bl_idname = "pbd_cloth.forzar_actualizacion"
+    bl_label = "Forzar Actualización"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        try:
+            obj = bpy.data.objects.get("Cloth")
+            if not obj:
+                self.report({'ERROR'}, "No se encontró el objeto 'Cloth'")
+                return {'CANCELLED'}
+            
+            # Forzar actualización completa
+            bpy.context.view_layer.update()
+            
+            # Actualizar el objeto
+            obj.update_from_editmode()
+            obj.data.update()
+            
+            # Forzar actualización de dependencias
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            depsgraph.update()
+            
+            # Actualizar la vista
+            for area in bpy.context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
+            
+            self.report({'INFO'}, "Actualización forzada. Intenta reproducir la animación.")
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
 
 
 # ============================================
@@ -736,36 +798,462 @@ def crear_animacion_shapekeys(obj, num_frames):
         shape_keys.animation_data.action = action
     
     # Crear keyframes para cada Shape Key
-    for i in range(1, min(len(key_blocks), num_frames + 1)):  # Empezar desde 1 (saltar Basis)
-        key_name = key_blocks[i].name
-        
-        # Crear F-curve para este Shape Key
-        data_path = f'key_blocks["{key_name}"].value'
-        fcurve = action.fcurves.find(data_path)
-        if not fcurve:
-            fcurve = action.fcurves.new(data_path)
-        
-        # Insertar keyframes
-        frame_num = i  # Frame 1 = sim_0001, Frame 2 = sim_0002, etc.
-        
-        # Valor 1.0 en el frame correspondiente
-        fcurve.keyframe_points.insert(frame_num, 1.0)
-        
-        # Valor 0.0 en frames adyacentes
-        if frame_num > 1:
-            fcurve.keyframe_points.insert(frame_num - 1, 0.0)
-        if frame_num < num_frames:
-            fcurve.keyframe_points.insert(frame_num + 1, 0.0)
-        
-        # Configurar interpolación constante
-        for kp in fcurve.keyframe_points:
-            kp.interpolation = 'CONSTANT'
+    # CRÍTICO: En modo absoluto, cada Shape Key debe tener keyframes en TODOS los frames
+    # - Valor 1.0 en su frame correspondiente
+    # - Valor 0.0 en TODOS los demás frames
     
-    # Actualizar
+    print(f"   📝 Creando keyframes para {min(len(key_blocks) - 1, num_frames)} Shape Keys...")
+    
+    # PRIMERO: Limpiar todas las F-curves existentes para empezar desde cero
+    if action.fcurves:
+        for fcurve in action.fcurves[:]:
+            action.fcurves.remove(fcurve)
+    
+    # SEGUNDO: Crear F-curves y keyframes para cada Shape Key
+    # CRÍTICO: En modo absoluto, cada Shape Key necesita keyframes en TODOS los frames
+    # donde su valor cambia. Necesitamos insertar keyframes en:
+    # - Frame 1: 0.0 para todos excepto sim_0001 (que tiene 1.0)
+    # - Frame N: 1.0 para sim_00NN
+    # - Frame N+1: 0.0 para todos
+    
+    print(f"   📝 Creando F-curves y keyframes...")
+    
+    # Crear todas las F-curves primero
+    fcurves_dict = {}
+    for i in range(1, min(len(key_blocks), num_frames + 1)):
+        key_name = key_blocks[i].name
+        data_path = f'key_blocks["{key_name}"].value'
+        fcurve = action.fcurves.new(data_path)
+        fcurves_dict[i] = fcurve
+    
+    # Ahora insertar keyframes frame por frame (más eficiente y evita conflictos)
+    print(f"   📝 Insertando keyframes frame por frame (1 a {num_frames})...")
+    
+    total_keyframes_insertados = 0
+    for frame in range(1, num_frames + 1):
+        # Para cada frame, determinar qué Shape Key debe estar activo
+        shape_key_activo = frame  # Frame 1 = sim_0001, Frame 2 = sim_0002, etc.
+        
+        if shape_key_activo < len(key_blocks):
+            # Insertar keyframes en todas las F-curves para este frame
+            for i, fcurve in fcurves_dict.items():
+                value = 1.0 if i == shape_key_activo else 0.0
+                
+                # Verificar si ya existe un keyframe en este frame
+                kp_existente = None
+                for kp in fcurve.keyframe_points:
+                    if abs(kp.co[0] - frame) < 0.01:
+                        kp_existente = kp
+                        break
+                
+                if kp_existente:
+                    # Actualizar valor existente
+                    kp_existente.co[1] = value
+                    kp_existente.interpolation = 'CONSTANT'
+                else:
+                    # Insertar nuevo keyframe
+                    kp = fcurve.keyframe_points.insert(frame, value)
+                    kp.interpolation = 'CONSTANT'
+                    total_keyframes_insertados += 1
+        
+        # Log de progreso cada 50 frames
+        if frame % 50 == 0:
+            print(f"      Progreso: Frame {frame}/{num_frames}...")
+    
+    print(f"   ✓ Total de keyframes insertados: {total_keyframes_insertados}")
+    
+    # Actualizar todas las F-curves
+    for fcurve in fcurves_dict.values():
+        fcurve.update()
+    
+    # LOG: Verificar que se insertaron correctamente
+    print(f"   📊 Verificación de keyframes insertados:")
+    print(f"      Total de F-curves: {len(fcurves_dict)}")
+    
+    # Verificar algunos Shape Keys específicos
+    for i in [1, 2, 3, 50, 100, 150]:
+        if i < len(key_blocks) and i in fcurves_dict:
+            fcurve = fcurves_dict[i]
+            key_name = key_blocks[i].name
+            num_kps = len(fcurve.keyframe_points)
+            expected_kps = num_frames  # Debería tener keyframes en todos los frames
+            status = "✅" if num_kps == expected_kps else "❌"
+            print(f"      {status} {key_name}: {num_kps} keyframes (esperado: {expected_kps})")
+            
+            # Verificar keyframe en su frame correspondiente
+            kp_en_frame = None
+            for kp in fcurve.keyframe_points:
+                if abs(kp.co[0] - i) < 0.01:
+                    kp_en_frame = kp
+                    break
+            
+            if kp_en_frame:
+                value = kp_en_frame.co[1]
+                expected_value = 1.0
+                status_val = "✅" if abs(value - expected_value) < 0.001 else "❌"
+                print(f"         {status_val} Frame {i}: {value:.6f} (esperado: {expected_value:.1f})")
+            else:
+                print(f"         ❌ No hay keyframe en Frame {i}")
+    
+    print(f"   ✓ Keyframes creados para todos los Shape Keys")
+    
+    # Actualizar todas las F-curves
     for fcurve in action.fcurves:
         fcurve.update()
     
-    print(f"   ✓ {len(key_blocks) - 1} Shape Keys con keyframes creados")
+    # CRÍTICO: Forzar actualización de los valores de Shape Keys en el frame actual
+    # Esto asegura que Blender aplique los keyframes
+    scene = bpy.context.scene
+    frame_actual = scene.frame_current
+    
+    # Establecer frame 1 para verificar que funciona
+    scene.frame_set(1)
+    
+    # Forzar actualización de dependencias
+    bpy.context.view_layer.update()
+    
+    # Verificar valores en frame 1
+    if len(key_blocks) > 1:
+        sim1 = key_blocks[1]
+        print(f"   📊 Verificación Frame 1: '{sim1.name}' = {sim1.value:.6f}")
+    
+    # Volver al frame original
+    scene.frame_set(frame_actual)
+    
+    # Verificar que se crearon correctamente
+    total_keyframes = sum(len(fc.keyframe_points) for fc in action.fcurves)
+    print(f"   ✓ {len(action.fcurves)} F-curves creadas")
+    print(f"   ✓ {total_keyframes} keyframes totales insertados")
+    
+    # Verificar un ejemplo
+    if len(action.fcurves) > 0:
+        ejemplo_fc = action.fcurves[0]
+        print(f"   📊 Ejemplo: '{ejemplo_fc.data_path}' tiene {len(ejemplo_fc.keyframe_points)} keyframes")
+        if len(ejemplo_fc.keyframe_points) > 0:
+            primer_kp = ejemplo_fc.keyframe_points[0]
+            ultimo_kp = ejemplo_fc.keyframe_points[-1]
+            print(f"      Rango: Frame {int(primer_kp.co[0])} (valor {primer_kp.co[1]:.1f}) a Frame {int(ultimo_kp.co[0])} (valor {ultimo_kp.co[1]:.1f})")
+
+
+# ============================================
+# FUNCIÓN DE DIAGNÓSTICO
+# ============================================
+def diagnosticar_keyframes_shapekeys():
+    """Función para diagnosticar los keyframes de Shape Keys"""
+    print("\n" + "=" * 60)
+    print("🔍 DIAGNÓSTICO COMPLETO DE KEYFRAMES")
+    print("=" * 60)
+    
+    obj = bpy.data.objects.get("Cloth")
+    if not obj or not obj.data.shape_keys:
+        print("❌ No se encontró el objeto 'Cloth' con Shape Keys")
+        return
+    
+    shape_keys = obj.data.shape_keys
+    key_blocks = shape_keys.key_blocks
+    
+    print(f"\n📋 INFORMACIÓN GENERAL:")
+    print(f"   Total de Shape Keys: {len(key_blocks)}")
+    print(f"   Modo: {'Relative' if shape_keys.use_relative else 'Absolute'}")
+    
+    action = shape_keys.animation_data.action if shape_keys.animation_data else None
+    
+    if not action:
+        print("❌ No hay Action asignado")
+        return
+    
+    print(f"\n✅ Action: '{action.name}'")
+    print(f"   F-curves: {len(action.fcurves)}")
+    
+    # Verificar TODAS las F-curves
+    print(f"\n📊 TODAS LAS F-CURVES (primeras 10):")
+    for i, fcurve in enumerate(action.fcurves[:10]):
+        print(f"\n   {i+1}. {fcurve.data_path}")
+        print(f"      Keyframes: {len(fcurve.keyframe_points)}")
+        
+        if len(fcurve.keyframe_points) > 0:
+            # Mostrar TODOS los keyframes
+            for kp in sorted(fcurve.keyframe_points, key=lambda k: k.co[0]):
+                frame = int(kp.co[0])
+                value = kp.co[1]
+                interp = kp.interpolation
+                print(f"      Frame {frame}: {value:.6f} (interp: {interp})")
+        else:
+            print(f"      ⚠️ No tiene keyframes")
+    
+    # Verificar valores en diferentes frames
+    print(f"\n📊 VALORES EN DIFERENTES FRAMES:")
+    scene = bpy.context.scene
+    frame_original = scene.frame_current
+    
+    test_frames = [1, 2, 3]
+    if len(key_blocks) > 50:
+        test_frames.extend([50, 100])
+    if len(key_blocks) > 150:
+        test_frames.append(150)
+    
+    for test_frame in test_frames:
+        if test_frame < len(key_blocks):
+            scene.frame_set(test_frame)
+            bpy.context.view_layer.update()
+            
+            # Verificar valores: mostrar el Shape Key que debería estar activo + algunos adyacentes
+            print(f"\n   Frame {test_frame}:")
+            
+            # Determinar qué Shape Keys mostrar
+            shape_keys_a_mostrar = []
+            
+            # Siempre mostrar el Shape Key que debería estar activo en este frame
+            if test_frame < len(key_blocks):
+                shape_keys_a_mostrar.append(test_frame)
+            
+            # Mostrar algunos Shape Keys adyacentes para contexto
+            if test_frame == 1:
+                # Frame 1: mostrar sim_0001, sim_0002, sim_0003
+                shape_keys_a_mostrar.extend([1, 2, 3])
+            elif test_frame == 2:
+                # Frame 2: mostrar sim_0001, sim_0002, sim_0003
+                shape_keys_a_mostrar.extend([1, 2, 3])
+            elif test_frame == 3:
+                # Frame 3: mostrar sim_0001, sim_0002, sim_0003, sim_0004
+                shape_keys_a_mostrar.extend([1, 2, 3, 4])
+            else:
+                # Frames más altos: mostrar el activo + algunos antes y después
+                inicio = max(1, test_frame - 2)
+                fin = min(len(key_blocks), test_frame + 3)
+                shape_keys_a_mostrar.extend(range(inicio, fin))
+            
+            # Eliminar duplicados y ordenar
+            shape_keys_a_mostrar = sorted(set(shape_keys_a_mostrar))
+            
+            # Mostrar los Shape Keys seleccionados
+            for i in shape_keys_a_mostrar:
+                if i < len(key_blocks):
+                    key = key_blocks[i]
+                    expected = 1.0 if i == test_frame else 0.0
+                    status = "✅" if abs(key.value - expected) < 0.001 else "❌"
+                    print(f"      {status} {key.name}: {key.value:.6f} (esperado: {expected:.1f})")
+    
+    # Volver al frame original
+    scene.frame_set(frame_original)
+    
+    # Verificar si los Shape Keys tienen posiciones diferentes
+    print(f"\n📊 VERIFICACIÓN DE POSICIONES DE VÉRTICES:")
+    if len(key_blocks) >= 3:
+        # Comparar Basis, sim_0001, sim_0002
+        basis = key_blocks[0]
+        sim1 = key_blocks[1]
+        sim2 = key_blocks[2] if len(key_blocks) > 2 else None
+        
+        if basis and sim1:
+            # Comparar primer vértice
+            if len(basis.data) > 0 and len(sim1.data) > 0:
+                v_basis = basis.data[0].co
+                v_sim1 = sim1.data[0].co
+                diff = (v_sim1 - v_basis).length
+                status = "✅" if diff > 0.001 else "❌"
+                print(f"   {status} Basis vs sim_0001 (vértice 0): diferencia = {diff:.6f}")
+                
+                if sim2 and len(sim2.data) > 0:
+                    v_sim2 = sim2.data[0].co
+                    diff2 = (v_sim2 - v_basis).length
+                    status2 = "✅" if diff2 > 0.001 else "❌"
+                    print(f"   {status2} Basis vs sim_0002 (vértice 0): diferencia = {diff2:.6f}")
+                    
+                    diff12 = (v_sim2 - v_sim1).length
+                    status12 = "✅" if diff12 > 0.001 else "❌"
+                    print(f"   {status12} sim_0001 vs sim_0002 (vértice 0): diferencia = {diff12:.6f}")
+    
+    # Resumen
+    print(f"\n📊 RESUMEN:")
+    total_keyframes = sum(len(fc.keyframe_points) for fc in action.fcurves)
+    print(f"   Total de F-curves: {len(action.fcurves)}")
+    print(f"   Total de keyframes: {total_keyframes}")
+    
+    # Verificar si hay problemas
+    fcurves_sin_keyframes = sum(1 for fc in action.fcurves if len(fc.keyframe_points) == 0)
+    if fcurves_sin_keyframes > 0:
+        print(f"   ⚠️ {fcurves_sin_keyframes} F-curves sin keyframes")
+    
+    # Verificar si los valores son correctos en frames clave
+    print(f"\n📊 VERIFICACIÓN FINAL:")
+    frames_verificar = [1, 2, 3, 50, 100, 150]
+    frames_ok = 0
+    for f in frames_verificar:
+        if f < len(key_blocks):
+            scene.frame_set(f)
+            bpy.context.view_layer.update()
+            key_activo = key_blocks[f]
+            if abs(key_activo.value - 1.0) < 0.001:
+                frames_ok += 1
+    
+    if frames_ok == len([f for f in frames_verificar if f < len(key_blocks)]):
+        print(f"   ✅ Todos los frames clave tienen el Shape Key correcto activo")
+    else:
+        print(f"   ⚠️ Algunos frames clave no tienen el Shape Key correcto activo")
+    
+    # Volver al frame original
+    scene.frame_set(frame_original)
+    
+    # VERIFICACIÓN CRÍTICA: Estado del objeto y visualización
+    print(f"\n🔍 VERIFICACIÓN DE VISUALIZACIÓN:")
+    
+    # 1. Verificar modo del objeto
+    if obj.mode != 'OBJECT':
+        print(f"   ⚠️ Objeto en modo '{obj.mode}' (debería estar en 'OBJECT')")
+    else:
+        print(f"   ✅ Objeto en modo OBJECT")
+    
+    # 2. Verificar si el objeto está visible
+    print(f"   Visibilidad: visible={obj.visible_get()}, hide_viewport={obj.hide_viewport}, hide_render={obj.hide_render}")
+    
+    # 3. Verificar si los Shape Keys están habilitados
+    if shape_keys.use_relative:
+        print(f"   ⚠️ Shape Keys en modo RELATIVE (debería ser ABSOLUTE)")
+    else:
+        print(f"   ✅ Shape Keys en modo ABSOLUTE")
+    
+    # 4. Verificar si hay modificadores que puedan interferir
+    if obj.modifiers:
+        print(f"   ⚠️ Objeto tiene {len(obj.modifiers)} modificador(es) que pueden interferir:")
+        for mod in obj.modifiers:
+            print(f"      - {mod.name} ({mod.type})")
+    else:
+        print(f"   ✅ No hay modificadores que interfieran")
+    
+    # 5. Verificar evaluación de la animación
+    print(f"\n📊 VERIFICACIÓN DE EVALUACIÓN DE ANIMACIÓN:")
+    
+    # CRÍTICO: Necesitamos obtener el objeto EVALUADO (con Shape Keys aplicados)
+    # no el objeto base (sin Shape Keys)
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    
+    scene.frame_set(1)
+    bpy.context.view_layer.update()
+    obj_eval1 = obj.evaluated_get(depsgraph)
+    v1_frame1 = obj_eval1.data.vertices[0].co.copy() if len(obj_eval1.data.vertices) > 0 else None
+    
+    scene.frame_set(10)
+    bpy.context.view_layer.update()
+    depsgraph.update()
+    obj_eval10 = obj.evaluated_get(depsgraph)
+    v1_frame10 = obj_eval10.data.vertices[0].co.copy() if len(obj_eval10.data.vertices) > 0 else None
+    
+    scene.frame_set(50)
+    bpy.context.view_layer.update()
+    depsgraph.update()
+    obj_eval50 = obj.evaluated_get(depsgraph)
+    v1_frame50 = obj_eval50.data.vertices[0].co.copy() if len(obj_eval50.data.vertices) > 0 else None
+    
+    if v1_frame1 and v1_frame10 and v1_frame50:
+        diff_1_10 = (v1_frame10 - v1_frame1).length
+        diff_1_50 = (v1_frame50 - v1_frame1).length
+        diff_10_50 = (v1_frame50 - v1_frame10).length
+        
+        print(f"   Vértice 0 en Frame 1:  ({v1_frame1.x:.3f}, {v1_frame1.y:.3f}, {v1_frame1.z:.3f})")
+        print(f"   Vértice 0 en Frame 10: ({v1_frame10.x:.3f}, {v1_frame10.y:.3f}, {v1_frame10.z:.3f})")
+        print(f"   Vértice 0 en Frame 50: ({v1_frame50.x:.3f}, {v1_frame50.y:.3f}, {v1_frame50.z:.3f})")
+        print(f"   Diferencia Frame 1→10: {diff_1_10:.6f}")
+        print(f"   Diferencia Frame 1→50: {diff_1_50:.6f}")
+        print(f"   Diferencia Frame 10→50: {diff_10_50:.6f}")
+        
+        if diff_1_10 > 0.001 or diff_1_50 > 0.001:
+            print(f"   ✅ Blender SÍ está aplicando los Shape Keys (vértices cambian entre frames)")
+        else:
+            print(f"   ❌ Blender NO está aplicando los Shape Keys (vértices NO cambian entre frames)")
+            print(f"   💡 Posibles causas y soluciones:")
+            print(f"      1. Verificar que los Shape Keys estén visibles:")
+            print(f"         - Selecciona el objeto 'Cloth'")
+            print(f"         - Ve a Properties > Mesh Data > Shape Keys")
+            print(f"         - Asegúrate de que el icono del ojo esté activo para los Shape Keys")
+            print(f"      2. Forzar actualización del mesh:")
+            print(f"         - Presiona el botón 'Forzar Actualización' en el panel")
+            print(f"      3. Verificar que el objeto esté seleccionado y visible")
+            print(f"      4. Intentar reproducir la animación (Space bar)")
+            
+            # Verificar valores de Shape Keys directamente
+            print(f"\n   🔍 Verificación directa de valores de Shape Keys:")
+            scene.frame_set(1)
+            bpy.context.view_layer.update()
+            print(f"      Frame 1: sim_0001 = {key_blocks[1].value:.6f}, sim_0002 = {key_blocks[2].value:.6f}")
+            
+            scene.frame_set(10)
+            bpy.context.view_layer.update()
+            print(f"      Frame 10: sim_0001 = {key_blocks[1].value:.6f}, sim_0010 = {key_blocks[10].value:.6f}")
+            
+            scene.frame_set(50)
+            bpy.context.view_layer.update()
+            print(f"      Frame 50: sim_0001 = {key_blocks[1].value:.6f}, sim_0050 = {key_blocks[50].value:.6f}")
+            
+            # CRÍTICO: Comparar posiciones almacenadas en Shape Keys vs posiciones evaluadas
+            print(f"\n   🔍 COMPARACIÓN: Posiciones almacenadas vs evaluadas:")
+            
+            # Leer posiciones almacenadas directamente en los Shape Keys
+            if len(key_blocks) > 10 and len(key_blocks[1].data) > 0 and len(key_blocks[10].data) > 0:
+                # Posición almacenada en sim_0001 (frame 1)
+                stored_sim1 = key_blocks[1].data[0].co.copy()
+                # Posición almacenada en sim_0010 (frame 10)
+                stored_sim10 = key_blocks[10].data[0].co.copy()
+                
+                print(f"      Posición ALMACENADA en sim_0001: ({stored_sim1.x:.3f}, {stored_sim1.y:.3f}, {stored_sim1.z:.3f})")
+                print(f"      Posición ALMACENADA en sim_0010: ({stored_sim10.x:.3f}, {stored_sim10.y:.3f}, {stored_sim10.z:.3f})")
+                print(f"      Posición EVALUADA en Frame 1: ({v1_frame1.x:.3f}, {v1_frame1.y:.3f}, {v1_frame1.z:.3f})")
+                print(f"      Posición EVALUADA en Frame 10: ({v1_frame10.x:.3f}, {v1_frame10.y:.3f}, {v1_frame10.z:.3f})")
+                
+                # Comparar
+                diff_stored = (stored_sim10 - stored_sim1).length
+                diff_eval = (v1_frame10 - v1_frame1).length
+                
+                print(f"      Diferencia entre Shape Keys almacenados: {diff_stored:.6f}")
+                print(f"      Diferencia entre posiciones evaluadas: {diff_eval:.6f}")
+                
+                if diff_stored > 0.001 and diff_eval < 0.001:
+                    print(f"      ❌ PROBLEMA ENCONTRADO: Los Shape Keys tienen posiciones diferentes,")
+                    print(f"         pero Blender NO está aplicándolas al mesh evaluado.")
+                    print(f"         Esto indica un problema con la evaluación de Shape Keys absolutos.")
+                    
+                    # Verificar si el problema es con el modo
+                    print(f"\n      🔧 VERIFICACIÓN ADICIONAL:")
+                    print(f"         use_relative en código: {shape_keys.use_relative}")
+                    print(f"         use_relative actual: {obj.data.shape_keys.use_relative if obj.data.shape_keys else 'N/A'}")
+                    
+                    # Intentar forzar modo absoluto
+                    if obj.data.shape_keys:
+                        obj.data.shape_keys.use_relative = False
+                        print(f"         ✅ Forzado use_relative = False")
+                        
+                        # Re-evaluar
+                        scene.frame_set(1)
+                        bpy.context.view_layer.update()
+                        depsgraph.update()
+                        obj_eval1_new = obj.evaluated_get(depsgraph)
+                        v1_frame1_new = obj_eval1_new.data.vertices[0].co.copy() if len(obj_eval1_new.data.vertices) > 0 else None
+                        
+                        scene.frame_set(10)
+                        bpy.context.view_layer.update()
+                        depsgraph.update()
+                        obj_eval10_new = obj.evaluated_get(depsgraph)
+                        v1_frame10_new = obj_eval10_new.data.vertices[0].co.copy() if len(obj_eval10_new.data.vertices) > 0 else None
+                        
+                        if v1_frame1_new and v1_frame10_new:
+                            diff_new = (v1_frame10_new - v1_frame1_new).length
+                            print(f"         Diferencia después de forzar ABSOLUTE: {diff_new:.6f}")
+                            if diff_new > 0.001:
+                                print(f"         ✅ ¡PROBLEMA RESUELTO! Los vértices ahora cambian.")
+                            else:
+                                print(f"         ❌ Aún no funciona. Puede ser un bug de Blender con Shape Keys absolutos.")
+    
+    # Volver al frame original
+    scene.frame_set(frame_original)
+    
+    # 6. Verificar configuración de la escena
+    print(f"\n📊 CONFIGURACIÓN DE ESCENA:")
+    print(f"   Frame actual: {scene.frame_current}")
+    print(f"   Frame inicio: {scene.frame_start}")
+    print(f"   Frame fin: {scene.frame_end}")
+    print(f"   FPS: {scene.render.fps}")
+    
+    print("\n" + "=" * 60)
 
 
 # ============================================
@@ -774,7 +1262,9 @@ def crear_animacion_shapekeys(obj, num_frames):
 classes = [
     PBD_CLOTH_PT_Panel,
     PBD_CLOTH_OT_SimularShapeKeys,
-    PBD_CLOTH_OT_ResetSimulando
+    PBD_CLOTH_OT_ResetSimulando,
+    PBD_CLOTH_OT_DiagnosticarKeyframes,
+    PBD_CLOTH_OT_ForzarActualizacion
 ]
 
 
