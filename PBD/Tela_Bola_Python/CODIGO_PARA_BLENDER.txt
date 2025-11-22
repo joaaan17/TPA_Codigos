@@ -1,0 +1,67 @@
+# ============================================
+# COPIA Y PEGA ESTE CÓDIGO EN EL TEXT EDITOR DE BLENDER
+# ============================================
+
+import bpy
+import os
+import sys
+
+# Nombre del script principal a ejecutar
+filename = "blender_tela.py"
+
+# Obtener la ruta del directorio donde está el archivo .blend
+# Si el archivo .blend está guardado, usa su directorio
+if bpy.data.filepath:
+    base_dir = os.path.dirname(bpy.data.filepath)
+else:
+    # Si no está guardado, usar el directorio del usuario
+    # IMPORTANTE: Guarda tu archivo .blend en la carpeta Tela_Bola_Python/
+    base_dir = os.path.expanduser("~")
+
+# Ruta a la carpeta Python donde están todos los módulos
+python_dir = os.path.join(base_dir, "Python")
+
+# Si no existe, intentar buscar en diferentes ubicaciones
+if not os.path.exists(python_dir):
+    # Intentar en la carpeta Tela_Bola_Python
+    tela_dir = os.path.join(base_dir, "Tela_Bola_Python")
+    if os.path.exists(tela_dir):
+        python_dir = os.path.join(tela_dir, "Python")
+    else:
+        # Último intento: buscar en el directorio actual del script
+        # Ajusta esta ruta manualmente si es necesario
+        script_dir = r"C:\Users\jonro\Desktop\Vida Universitaria\Cuarto\TPA\LABS\TPA_Codigos\PBD\Tela_Bola_Python"
+        python_dir = os.path.join(script_dir, "Python")
+
+# Añadir la carpeta Python al sys.path
+if python_dir not in sys.path:
+    sys.path.insert(0, python_dir)
+    print(f"✓ Añadida ruta: {python_dir}")
+
+# Ruta completa al script principal
+filepath = os.path.join(python_dir, filename)
+
+# Verificar que existe
+if not os.path.exists(filepath):
+    print(f"❌ ERROR: No se encontró: {filepath}")
+    print(f"   Asegúrate de guardar tu .blend en: Tela_Bola_Python/")
+    print(f"   O ajusta la ruta 'script_dir' en este código")
+else:
+    print(f"✓ Archivo encontrado: {filepath}")
+    
+    # Crear namespace global
+    global_namespace = {
+        "__file__": filepath,
+        "__name__": "__main__"
+    }
+    
+    # Ejecutar el script
+    try:
+        with open(filepath, 'rb') as file:
+            exec(compile(file.read(), filepath, 'exec'), global_namespace)
+        print("✓ Script ejecutado correctamente")
+    except Exception as e:
+        print(f"❌ ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+
