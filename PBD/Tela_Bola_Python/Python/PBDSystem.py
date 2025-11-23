@@ -23,10 +23,10 @@ class PBDSystem:
         self.shapeMatching = None  # Shape Matching (opcional, para soft-bodies)
         
         # Crear partículas iniciales
-        p = mathutils.Vector((0, 0, 0))
-        v = mathutils.Vector((0, 0, 0))
-        
+        # CRÍTICO: Crear nuevos Vectors para cada partícula para evitar referencias compartidas
         for i in range(n):
+            p = mathutils.Vector((0, 0, 0))  # Nuevo Vector para cada partícula
+            v = mathutils.Vector((0, 0, 0))  # Nuevo Vector para cada partícula
             self.particles.append(Particle(p, v, mass))
     
     def set_n_iters(self, n):
@@ -48,7 +48,7 @@ class PBDSystem:
         """Configurar Shape Matching (opcional)"""
         self.shapeMatching = shapeMatching
     
-    def run(self, dt, apply_damping=True, use_plane_col=True, use_sphere_col=True, use_shape_matching=True, debug_frame=None):
+    def run(self, dt, apply_damping=True, use_plane_col=True, use_sphere_col=True, use_shape_matching=True, debug_frame=None, floor_height=None):
         """
         Ejecutar un paso de simulación PBD
         
@@ -58,6 +58,7 @@ class PBDSystem:
         use_sphere_col: usar colisiones con esfera
         use_shape_matching: usar Shape Matching
         debug_frame: número de frame para logs (None = sin logs)
+        floor_height: altura del suelo para colisiones (None = desactivado)
         """
         import math
         
@@ -108,6 +109,8 @@ class PBDSystem:
             # Importar aquí para evitar imports circulares
             from BendingConstraint import BendingConstraint
             from ShearConstraint import ShearConstraint
+            from VolumeConstraintTet import VolumeConstraintTet
+            from VolumeConstraintGlobal import VolumeConstraintGlobal
             
             # LOG: Antes de ShearConstraint
             if debug_frame is not None and debug_frame <= 3 and it == 0:
@@ -133,6 +136,44 @@ class PBDSystem:
                 if nan_after_bend > nan_before_bend:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: BendingConstraint generó NaN: {nan_before_bend} -> {nan_after_bend}")
             
+            # 2b. APLICAR SHAPE MATCHING (Müller 2005) en primeras iteraciones
+            if self.shapeMatching and use_shape_matching and it < shapeMatchingIterations:
+                self.shapeMatching.apply()
+            
+            # 2c. Resolver colisiones PRIMERO (antes de restricciones de volumen)
+            self.projectCollisions(use_plane_col, use_sphere_col, dt)
+            
+            # 2d. Colisión con suelo (plano Z = altura_suelo) - APLICAR ANTES de restricciones de volumen
+            if use_plane_col and floor_height is not None:
+                self.projectFloorCollision(dt, floor_height)
+            
+            # 2e. Resolver restricciones de volumen DESPUÉS de colisiones (para corregir el aplastamiento)
+            # APLICAR MÚLTIPLES VECES para mayor estabilidad cuando hay compresión
+            # LOG: Antes de VolumeConstraint
+            if debug_frame is not None and debug_frame <= 3 and it == 0:
+                nan_before_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+            
+            # Aplicar restricciones de volumen múltiples veces para mayor estabilidad
+            # Esto es crítico cuando hay compresión fuerte
+            # Aumentar iteraciones en las primeras iteraciones del solver (cuando hay más compresión)
+            if it < 2:  # Primeras 2 iteraciones del solver
+                num_volume_iterations = 4  # 4 veces para mayor estabilidad al inicio
+            else:
+                num_volume_iterations = 3  # 3 veces para el resto
+            
+            for vol_iter in range(num_volume_iterations):
+                # Proyectar restricciones de volumen por tetraedros
+                self.projectConstraintsOfType(VolumeConstraintTet)
+                
+                # Proyectar restricción de volumen global (si existe)
+                self.projectConstraintsOfType(VolumeConstraintGlobal)
+            
+            # LOG: Después de VolumeConstraint
+            if debug_frame is not None and debug_frame <= 3 and it == 0:
+                nan_after_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+                if nan_after_vol > nan_before_vol:
+                    print(f"   🔴 Frame {debug_frame}, iter {it}: VolumeConstraint generó NaN: {nan_before_vol} -> {nan_after_vol}")
+            
             # LOG: Verificar posiciones después de todas las restricciones (solo primera iteración, frame 1-3)
             if debug_frame is not None and debug_frame <= 3 and it == 0:
                 nan_count = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
@@ -140,13 +181,6 @@ class PBDSystem:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: {nan_count} partículas con NaN DESPUÉS de todas las restricciones")
                 else:
                     print(f"   ✅ Frame {debug_frame}, iter {it}: Todas válidas DESPUÉS de todas las restricciones")
-            
-            # 2b. APLICAR SHAPE MATCHING (Müller 2005) en primeras iteraciones
-            if self.shapeMatching and use_shape_matching and it < shapeMatchingIterations:
-                self.shapeMatching.apply()
-            
-            # 2c. Resolver colisiones SIEMPRE al final de la iteración
-            self.projectCollisions(use_plane_col, use_sphere_col, dt)
         
         # LOG: Verificar posiciones después de restricciones, antes de update_pbd_vel (solo frame 1-3)
         if debug_frame is not None and debug_frame <= 3:
@@ -217,6 +251,55 @@ class PBDSystem:
             # Se pueden añadir más tipos de colisiones aquí
             if hasattr(obj, 'project'):
                 obj.project(self.particles, dt)
+    
+    def projectFloorCollision(self, dt, floor_height=0.0):
+        """
+        Proyectar colisiones con el suelo (plano horizontal) de forma suave
+        Usa una fuerza de repulsión proporcional a la penetración en lugar de mover directamente
+        floor_height: altura Z del suelo (en Blender, Z es el eje vertical)
+        """
+        import math
+        
+        # Parámetros de colisión suave
+        # MUY REDUCIDOS para permitir que las restricciones de volumen funcionen
+        # La colisión debe ser lo suficientemente suave para que las restricciones puedan corregir
+        stiffness_collision = 0.2  # Rigidez de la colisión (0-1, más alto = más rígido) - MUY REDUCIDO
+        damping_collision = 0.2  # Damping del rebote (0-1, más alto = menos rebote) - REDUCIDO
+        min_penetration = 0.0001  # Penetración mínima para aplicar corrección (evita micro-colisiones)
+        
+        # Límite máximo de penetración permitida antes de aplicar corrección forzada
+        # Esto previene que las partículas se compriman demasiado
+        max_penetration = 0.1  # Si la penetración es mayor, aplicar corrección más agresiva
+        
+        for particle in self.particles:
+            if particle.bloqueada:
+                continue
+            
+            # Calcular penetración en el suelo
+            penetration = floor_height - particle.location.z
+            
+            # Si hay penetración significativa, aplicar corrección suave
+            if penetration > min_penetration:
+                # Si la penetración es muy grande, limitarla para prevenir compresión excesiva
+                if penetration > max_penetration:
+                    # Aplicar corrección más agresiva pero limitada
+                    correction = max_penetration * stiffness_collision + (penetration - max_penetration) * 0.5
+                else:
+                    # Corrección proporcional a la penetración (más suave que mover directamente)
+                    correction = penetration * stiffness_collision
+                
+                particle.location.z += correction
+                
+                # Si la velocidad apunta hacia abajo (Z negativo), reflejarla (con damping)
+                if particle.velocity.z < 0:
+                    # Damping de rebote (coeficiente de restitución)
+                    restitution = damping_collision  # Ajustado para menos rebote agresivo
+                    particle.velocity.z = -particle.velocity.z * restitution
+                    
+                    # También reducir velocidad horizontal por fricción (X e Y)
+                    friction = 0.7  # Fricción ligeramente reducida
+                    particle.velocity.x *= friction
+                    particle.velocity.y *= friction
     
     def applyGlobalDamping(self, k_damping, debug_frame=None):
         """

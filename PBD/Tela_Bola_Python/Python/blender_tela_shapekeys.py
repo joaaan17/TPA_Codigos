@@ -160,6 +160,87 @@ def init_properties():
         name="Is Simulating",
         default=False
     )
+    
+    # ===== PROPIEDADES PARA MODO DE SIMULACIÓN =====
+    scene.pbd_simulation_mode = bpy.props.EnumProperty(
+        name="Modo de Simulación",
+        description="Tipo de simulación a ejecutar",
+        items=[
+            ('CLOTH', "Tela", "Simulación de tela con restricciones de distancia, bending y shear"),
+            ('VOLUME_CUBE', "Cubo Volumen", "Simulación de cubo con restricciones de volumen")
+        ],
+        default='CLOTH'
+    )
+    
+    # ===== PROPIEDADES PARA CUBO DE VOLUMEN =====
+    scene.pbd_cube_side = bpy.props.FloatProperty(
+        name="Lado del Cubo",
+        description="Longitud del lado del cubo en metros",
+        default=1.0,
+        min=0.1,
+        max=5.0
+    )
+    
+    scene.pbd_cube_density = bpy.props.FloatProperty(
+        name="Densidad",
+        description="Densidad del material del cubo (kg/m³)",
+        default=100.0,
+        min=1.0,
+        max=10000.0
+    )
+    
+    scene.pbd_cube_volume_stiffness = bpy.props.FloatProperty(
+        name="Stiffness Volumen",
+        description="Rigidez de las restricciones de volumen por tetraedro [0, 1]. Valores más altos = más resistencia a la compresión",
+        default=0.8,
+        min=0.0,
+        max=1.0
+    )
+    
+    scene.pbd_cube_global_volume_stiffness = bpy.props.FloatProperty(
+        name="Stiffness Volumen Global",
+        description="Rigidez de la restricción de volumen global [0, 1]. 0 = desactivado",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    scene.pbd_cube_use_global_volume = bpy.props.BoolProperty(
+        name="Usar Volumen Global",
+        description="Activar restricción de volumen global (Müller 2007)",
+        default=False
+    )
+    
+    # ===== PROPIEDADES PARA SUELO =====
+    scene.pbd_floor_enabled = bpy.props.BoolProperty(
+        name="Habilitar Suelo",
+        description="Crear un suelo para colisiones",
+        default=True
+    )
+    
+    scene.pbd_floor_height = bpy.props.FloatProperty(
+        name="Altura del Suelo",
+        description="Altura Y del suelo en metros",
+        default=0.0,
+        min=-10.0,
+        max=10.0
+    )
+    
+    scene.pbd_cube_start_height = bpy.props.FloatProperty(
+        name="Altura Inicial Cubo",
+        description="Altura Y inicial del cubo (para que caiga)",
+        default=5.0,
+        min=0.0,
+        max=20.0
+    )
+    
+    scene.pbd_cube_subdivisions = bpy.props.IntProperty(
+        name="Subdivisiones",
+        description="Número de subdivisiones por eje (3 = 27 vértices, 4 = 64 vértices, etc.)",
+        default=3,
+        min=2,
+        max=6
+    )
 
 
 # ============================================
@@ -177,27 +258,62 @@ class PBD_CLOTH_PT_Panel(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
         
-        # Dimensiones
+        # ===== SELECTOR DE MODO =====
         box = layout.box()
-        box.label(text="Dimensiones:", icon='MESH_GRID')
-        box.prop(scene, "pbd_cloth_width")
-        box.prop(scene, "pbd_cloth_height")
-        box.prop(scene, "pbd_cloth_n_ancho")
-        box.prop(scene, "pbd_cloth_n_alto")
+        box.label(text="Modo de Simulación:", icon='SETTINGS')
+        box.prop(scene, "pbd_simulation_mode", expand=True)
         
-        # Stiffness
-        box = layout.box()
-        box.label(text="Stiffness:", icon='MODIFIER_ON')
-        box.prop(scene, "pbd_cloth_stiffness")
-        box.prop(scene, "pbd_cloth_bending_stiffness")
-        box.prop(scene, "pbd_cloth_shear_stiffness")
+        mode = scene.pbd_simulation_mode
         
-        # Restricciones
-        box = layout.box()
-        box.label(text="Restricciones:", icon='CONSTRAINT')
-        box.prop(scene, "pbd_cloth_use_bending")
-        box.prop(scene, "pbd_cloth_use_shear")
+        if mode == 'CLOTH':
+            # ===== PANEL PARA MODO TELA =====
+            # Dimensiones
+            box = layout.box()
+            box.label(text="Dimensiones:", icon='MESH_GRID')
+            box.prop(scene, "pbd_cloth_width")
+            box.prop(scene, "pbd_cloth_height")
+            box.prop(scene, "pbd_cloth_n_ancho")
+            box.prop(scene, "pbd_cloth_n_alto")
+            
+            # Stiffness
+            box = layout.box()
+            box.label(text="Stiffness:", icon='MODIFIER_ON')
+            box.prop(scene, "pbd_cloth_stiffness")
+            box.prop(scene, "pbd_cloth_bending_stiffness")
+            box.prop(scene, "pbd_cloth_shear_stiffness")
+            
+            # Restricciones
+            box = layout.box()
+            box.label(text="Restricciones:", icon='CONSTRAINT')
+            box.prop(scene, "pbd_cloth_use_bending")
+            box.prop(scene, "pbd_cloth_use_shear")
+            
+        elif mode == 'VOLUME_CUBE':
+            # ===== PANEL PARA MODO CUBO VOLUMEN =====
+            # Parámetros del cubo
+            box = layout.box()
+            box.label(text="Parámetros del Cubo:", icon='MESH_CUBE')
+            box.prop(scene, "pbd_cube_side")
+            box.prop(scene, "pbd_cube_density")
+            
+            # Stiffness de volumen
+            box = layout.box()
+            box.label(text="Stiffness Volumen:", icon='MODIFIER_ON')
+            box.prop(scene, "pbd_cube_volume_stiffness")
+            box.prop(scene, "pbd_cube_use_global_volume")
+            if scene.pbd_cube_use_global_volume:
+                box.prop(scene, "pbd_cube_global_volume_stiffness")
+            box.prop(scene, "pbd_cube_subdivisions")
+            
+            # Suelo
+            box = layout.box()
+            box.label(text="Suelo:", icon='MESH_PLANE')
+            box.prop(scene, "pbd_floor_enabled")
+            if scene.pbd_floor_enabled:
+                box.prop(scene, "pbd_floor_height")
+                box.prop(scene, "pbd_cube_start_height")
         
+        # ===== PARÁMETROS COMUNES =====
         # Solver
         box = layout.box()
         box.label(text="Solver:", icon='SETTINGS')
@@ -208,10 +324,11 @@ class PBD_CLOTH_PT_Panel(bpy.types.Panel):
         box = layout.box()
         box.label(text="Fuerzas:", icon='FORCE_WIND')
         box.prop(scene, "pbd_cloth_gravity")
-        box.prop(scene, "pbd_cloth_wind_x")
-        box.prop(scene, "pbd_cloth_wind_y")
-        box.prop(scene, "pbd_cloth_wind_z")
-        box.prop(scene, "pbd_cloth_wind_variation")
+        if mode == 'CLOTH':
+            box.prop(scene, "pbd_cloth_wind_x")
+            box.prop(scene, "pbd_cloth_wind_y")
+            box.prop(scene, "pbd_cloth_wind_z")
+            box.prop(scene, "pbd_cloth_wind_variation")
         
         # Botones
         box = layout.box()
@@ -219,7 +336,10 @@ class PBD_CLOTH_PT_Panel(bpy.types.Panel):
             box.label(text="⏳ Simulando...", icon='TIME')
             box.operator("pbd_cloth.reset_simulando", text="Reset Estado")
         else:
-            box.operator("pbd_cloth.simular_shapekeys", text="Simular y Guardar en Shape Keys", icon='PLAY')
+            if mode == 'CLOTH':
+                box.operator("pbd_cloth.simular_shapekeys", text="Simular Tela", icon='PLAY')
+            elif mode == 'VOLUME_CUBE':
+                box.operator("pbd_cloth.simular_cubo_volumen", text="Simular Cubo Volumen", icon='PLAY')
         
         # Botón de diagnóstico
         box = layout.box()
@@ -316,9 +436,176 @@ class PBD_CLOTH_OT_ForzarActualizacion(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+class PBD_CLOTH_OT_SimularCuboVolumen(bpy.types.Operator):
+    """Operador para simular cubo con restricciones de volumen"""
+    bl_idname = "pbd_cloth.simular_cubo_volumen"
+    bl_label = "Simular Cubo Volumen"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        try:
+            simular_cubo_volumen(context)
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
+
+
 # ============================================
 # FUNCIONES DE SIMULACIÓN
 # ============================================
+def crear_malla_cubo_blender(lado, subdivisiones=3):
+    """Crear el mesh del cubo subdividido en Blender"""
+    # NOTA: La eliminación del objeto anterior se hace en simular_cubo_volumen
+    # para evitar problemas de estado persistente. Solo crear el mesh aquí.
+    
+    # Crear nuevo mesh
+    mesh = bpy.data.meshes.new(name="VolumeCubeMesh")
+    obj = bpy.data.objects.new("VolumeCube", mesh)
+    bpy.context.collection.objects.link(obj)
+    
+    # Crear bmesh
+    bm = bmesh.new()
+    
+    # Generar vértices en una grilla 3D (igual que en CuboVolumen.py)
+    offset = lado / 2.0
+    step = lado / (subdivisiones - 1)
+    
+    verts_dict = {}  # Para evitar duplicados
+    
+    for z in range(subdivisiones):
+        for y in range(subdivisiones):
+            for x in range(subdivisiones):
+                pos = mathutils.Vector((
+                    -offset + x * step,
+                    -offset + y * step,
+                    -offset + z * step
+                ))
+                # Usar tupla como clave para evitar duplicados
+                key = (x, y, z)
+                if key not in verts_dict:
+                    vert = bm.verts.new(pos)
+                    verts_dict[key] = vert
+    
+    # Crear caras del cubo (solo las caras exteriores)
+    def get_vert(x, y, z):
+        """Obtener vértice en la grilla"""
+        if (x, y, z) in verts_dict:
+            return verts_dict[(x, y, z)]
+        return None
+    
+    # Cara inferior (z = 0)
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            v0 = get_vert(x, y, 0)
+            v1 = get_vert(x + 1, y, 0)
+            v2 = get_vert(x + 1, y + 1, 0)
+            v3 = get_vert(x, y + 1, 0)
+            if v0 and v1 and v2 and v3:
+                bm.faces.new([v0, v1, v2, v3])
+    
+    # Cara superior (z = subdivisiones - 1)
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            v0 = get_vert(x, y, subdivisiones - 1)
+            v1 = get_vert(x + 1, y, subdivisiones - 1)
+            v2 = get_vert(x + 1, y + 1, subdivisiones - 1)
+            v3 = get_vert(x, y + 1, subdivisiones - 1)
+            if v0 and v1 and v2 and v3:
+                bm.faces.new([v0, v3, v2, v1])  # Invertir orden para normal correcta
+    
+    # Cara frontal (y = 0)
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            v0 = get_vert(x, 0, z)
+            v1 = get_vert(x + 1, 0, z)
+            v2 = get_vert(x + 1, 0, z + 1)
+            v3 = get_vert(x, 0, z + 1)
+            if v0 and v1 and v2 and v3:
+                bm.faces.new([v0, v1, v2, v3])
+    
+    # Cara trasera (y = subdivisiones - 1)
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            v0 = get_vert(x, subdivisiones - 1, z)
+            v1 = get_vert(x + 1, subdivisiones - 1, z)
+            v2 = get_vert(x + 1, subdivisiones - 1, z + 1)
+            v3 = get_vert(x, subdivisiones - 1, z + 1)
+            if v0 and v1 and v2 and v3:
+                bm.faces.new([v0, v3, v2, v1])  # Invertir orden
+    
+    # Cara izquierda (x = 0)
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            v0 = get_vert(0, y, z)
+            v1 = get_vert(0, y + 1, z)
+            v2 = get_vert(0, y + 1, z + 1)
+            v3 = get_vert(0, y, z + 1)
+            if v0 and v1 and v2 and v3:
+                bm.faces.new([v0, v1, v2, v3])
+    
+    # Cara derecha (x = subdivisiones - 1)
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            v0 = get_vert(subdivisiones - 1, y, z)
+            v1 = get_vert(subdivisiones - 1, y + 1, z)
+            v2 = get_vert(subdivisiones - 1, y + 1, z + 1)
+            v3 = get_vert(subdivisiones - 1, y, z + 1)
+            if v0 and v1 and v2 and v3:
+                bm.faces.new([v0, v3, v2, v1])  # Invertir orden
+    
+    # Actualizar mesh
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    return obj
+
+
+def crear_suelo_blender(altura, tamaño=20.0):
+    """Crear un suelo plano en Blender para colisiones"""
+    import math
+    
+    # Eliminar suelo anterior si existe
+    obj_anterior = bpy.data.objects.get("Floor")
+    if obj_anterior:
+        bpy.data.objects.remove(obj_anterior)
+    
+    # Crear mesh del suelo
+    mesh = bpy.data.meshes.new(name="FloorMesh")
+    obj = bpy.data.objects.new("Floor", mesh)
+    bpy.context.collection.objects.link(obj)
+    
+    # Crear bmesh
+    bm = bmesh.new()
+    
+    # Crear un plano grande
+    # Por defecto create_grid crea un plano en el plano XY (normal hacia Z positivo)
+    # Como el eje vertical es Z, el suelo debe estar en XY (horizontal), así que NO necesita rotación
+    bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=tamaño)
+    
+    # Asegurar que los vértices estén indexados
+    bm.verts.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+    
+    # Mover a la altura correcta (en Z, que es el eje vertical en Blender)
+    # El plano ya está en XY, solo lo movemos en Z
+    bmesh.ops.translate(bm, vec=(0, 0, altura), verts=bm.verts)
+    
+    # Actualizar mesh
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    # Aplicar material gris para visualización
+    mat = bpy.data.materials.new(name="FloorMaterial")
+    mat.use_nodes = True
+    mat.node_tree.nodes["Principled BSDF"].inputs[0].default_value = (0.5, 0.5, 0.5, 1.0)
+    obj.data.materials.append(mat)
+    
+    return obj
+
+
 def crear_malla_tela_blender(ancho, alto, n_ancho, n_alto):
     """Crear el mesh de la tela en Blender"""
     # Eliminar objeto anterior si existe
@@ -445,7 +732,21 @@ def simular_y_guardar_shapekeys(context):
     
     print(f"   ✓ {min(len(mesh.vertices), len(system.particles))} partículas posicionadas según el mesh")
     
-    # Crear restricciones
+    # CRÍTICO: Bloquear partículas ANTES de crear constraints
+    # Esto asegura que las distancias iniciales de las constraints sean correctas
+    part_bloqueadas = 0
+    for i in range(n_ancho):
+        idx = i * n_alto + (n_alto - 1)  # j = n_alto - 1 (fila superior)
+        system.particles[idx].set_bloqueada(True)
+        part_bloqueadas += 1
+    
+    print(f"   📌 {part_bloqueadas}/{len(system.particles)} partículas bloqueadas (ancladas)")
+    if part_bloqueadas == len(system.particles):
+        print(f"   ⚠️ ADVERTENCIA: TODAS las partículas están bloqueadas. La tela no se moverá.")
+    elif part_bloqueadas == 0:
+        print(f"   ⚠️ ADVERTENCIA: Ninguna partícula está bloqueada. La tela caerá completamente.")
+    
+    # Crear restricciones (DESPUÉS de bloquear partículas)
     from DistanceConstraint import DistanceConstraint
     
     dx = ancho / (n_ancho - 1.0) if n_ancho > 1 else ancho
@@ -478,19 +779,6 @@ def simular_y_guardar_shapekeys(context):
     if use_shear:
         add_shear_constraints(system, n_alto, n_ancho, shear_stiffness)
     
-    # Anclar fila superior
-    part_bloqueadas = 0
-    for i in range(n_ancho):
-        idx = i * n_alto + (n_alto - 1)  # j = n_alto - 1 (fila superior)
-        system.particles[idx].set_bloqueada(True)
-        part_bloqueadas += 1
-    
-    print(f"   📌 {part_bloqueadas}/{len(system.particles)} partículas bloqueadas (ancladas)")
-    if part_bloqueadas == len(system.particles):
-        print(f"   ⚠️ ADVERTENCIA: TODAS las partículas están bloqueadas. La tela no se moverá.")
-    elif part_bloqueadas == 0:
-        print(f"   ⚠️ ADVERTENCIA: Ninguna partícula está bloqueada. La tela caerá completamente.")
-    
     # Eliminar Shape Keys existentes
     if obj.data.shape_keys:
         print(f"   🗑️ Eliminando {len(obj.data.shape_keys.key_blocks)} Shape Keys existentes...")
@@ -516,6 +804,50 @@ def simular_y_guardar_shapekeys(context):
     
     # Variable para comparar posiciones entre frames
     posiciones_frame_anterior = None
+    
+    # CRÍTICO: Período de "warm-up" para estabilizar la tela antes de guardar frames
+    # Esto evita el comportamiento explosivo al principio
+    warmup_frames = 20  # Número de frames de estabilización
+    print(f"\n   🔥 Ejecutando {warmup_frames} frames de warm-up para estabilización...")
+    
+    for warmup in range(warmup_frames):
+        # Resetear fuerzas
+        for particle in system.particles:
+            particle.force = mathutils.Vector((0.0, 0.0, 0.0))
+        
+        # Aplicar gravedad (gradualmente al principio para suavizar)
+        gravity_factor = min(1.0, (warmup + 1) / 10.0)  # Aumentar gradualmente
+        gravity = mathutils.Vector((0.0, 0.0, gravity_value * gravity_factor))
+        for particle in system.particles:
+            if not particle.bloqueada:
+                particle.force += gravity * particle.masa
+        
+        # Aplicar viento (solo después de algunos frames)
+        if warmup > 5 and wind_base.length > 0.001:
+            if wind_variation > 0.001:
+                variation = mathutils.Vector((
+                    random.uniform(-wind_variation, wind_variation),
+                    random.uniform(-wind_variation, wind_variation),
+                    random.uniform(-wind_variation, wind_variation)
+                ))
+                wind = wind_base + variation * wind_base.length
+            else:
+                wind = wind_base
+            
+            area_per_particle = (ancho * alto) / len(system.particles)
+            wind_factor = min(1.0, (warmup - 5) / 10.0)  # Aumentar gradualmente
+            for particle in system.particles:
+                if not particle.bloqueada:
+                    wind_force = wind * area_per_particle * 0.1 * wind_factor
+                    particle.force += wind_force
+        
+        # Ejecutar solver
+        try:
+            system.run(DT, apply_damping=True, use_plane_col=False, use_sphere_col=False, use_shape_matching=False)
+        except TypeError:
+            system.run(DT, apply_damping=True, use_plane_col=False, use_sphere_col=False, use_shape_matching=False)
+    
+    print(f"   ✅ Warm-up completado. La tela debería estar estabilizada.\n")
     
     # Usar try/finally para asegurar que el flag se resetee
     try:
@@ -1257,6 +1589,421 @@ def diagnosticar_keyframes_shapekeys():
 
 
 # ============================================
+# FUNCIÓN DE SIMULACIÓN DE CUBO VOLUMEN
+# ============================================
+def simular_cubo_volumen(context):
+    """Simular cubo con restricciones de volumen y guardar en Shape Keys"""
+    scene = context.scene
+    
+    # Obtener parámetros
+    lado = scene.pbd_cube_side
+    densidad = scene.pbd_cube_density
+    stiffness_volumen = scene.pbd_cube_volume_stiffness
+    stiffness_global = scene.pbd_cube_global_volume_stiffness if scene.pbd_cube_use_global_volume else None
+    solver_iterations = scene.pbd_cloth_solver_iterations
+    num_frames = scene.pbd_cloth_num_frames
+    DT = 1.0 / 60.0
+    gravity_value = scene.pbd_cloth_gravity
+    floor_height = scene.pbd_floor_height if scene.pbd_floor_enabled else None
+    start_height = scene.pbd_cube_start_height
+    
+    print("\n" + "=" * 60)
+    print("🎬 INICIANDO SIMULACIÓN CUBO VOLUMEN")
+    print("=" * 60)
+    print(f"   Lado del cubo: {lado}m")
+    print(f"   Densidad: {densidad} kg/m³")
+    print(f"   Stiffness volumen: {stiffness_volumen}")
+    if stiffness_global:
+        print(f"   Stiffness volumen global: {stiffness_global}")
+    print(f"   Frames: {num_frames}")
+    print(f"   Iteraciones solver: {solver_iterations}")
+    if floor_height is not None:
+        print(f"   Suelo habilitado a altura: {floor_height}m")
+        print(f"   Altura inicial cubo: {start_height}m")
+    
+    # Obtener número de subdivisiones
+    subdivisiones = scene.pbd_cube_subdivisions
+    
+    # ===== PASO 1: Eliminar objeto anterior COMPLETAMENTE (incluyendo mesh y Shape Keys) =====
+    # Esto es CRÍTICO para evitar que datos de ejecuciones anteriores interfieran
+    obj_anterior = bpy.data.objects.get("VolumeCube")
+    if obj_anterior:
+        # Eliminar Shape Keys primero
+        if obj_anterior.data.shape_keys:
+            print(f"   🗑️ Eliminando {len(obj_anterior.data.shape_keys.key_blocks)} Shape Keys del objeto anterior...")
+            while obj_anterior.data.shape_keys and len(obj_anterior.data.shape_keys.key_blocks) > 0:
+                obj_anterior.shape_key_remove(obj_anterior.active_shape_key)
+        
+        # Desvincular objeto de la colección
+        for collection in obj_anterior.users_collection:
+            collection.objects.unlink(obj_anterior)
+        
+        # Eliminar objeto y mesh
+        mesh_anterior = obj_anterior.data
+        bpy.data.objects.remove(obj_anterior)
+        if mesh_anterior:
+            bpy.data.meshes.remove(mesh_anterior)
+        
+        print(f"   ✓ Objeto anterior completamente eliminado")
+    
+    # ===== PASO 2: Importar y recargar módulos =====
+    import sys
+    import importlib
+    import gc  # Garbage collector para limpiar referencias
+    
+    # FORZAR LIMPIEZA COMPLETA: Eliminar referencias a módulos anteriores
+    # Esto es crítico para evitar estado persistente entre ejecuciones
+    modules_to_reload = ['CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal', 'PBDSystem', 'Particle']
+    
+    # Primero, eliminar referencias de sys.modules
+    for module_name in modules_to_reload:
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+            print(f"   🗑️ Módulo '{module_name}' eliminado de sys.modules")
+    
+    # Forzar garbage collection para limpiar objetos huérfanos
+    gc.collect()
+    
+    # Ahora importar módulos frescos
+    from CuboVolumen import crear_cubo_volumen
+    from VolumeConstraintTet import VolumeConstraintTet
+    from VolumeConstraintGlobal import VolumeConstraintGlobal
+    
+    print(f"   ✓ Módulos importados desde cero (sin estado persistente)")
+    
+    # ===== PASO 3: Crear sistema PBD PRIMERO (antes del mesh de Blender) =====
+    # Esto asegura que los V0 se calculen sobre posiciones limpias
+    print(f"   📦 Creando sistema PBD con {subdivisiones}x{subdivisiones}x{subdivisiones} subdivisiones...")
+    system, volume_constraints, global_constraint = crear_cubo_volumen(
+        lado, densidad, stiffness_volumen, stiffness_global, subdivisiones
+    )
+    system.set_n_iters(solver_iterations)
+    
+    print(f"   ✓ Sistema PBD creado con {len(system.particles)} partículas")
+    print(f"   ✓ {len(volume_constraints)} restricciones de volumen por tetraedro creadas")
+    if global_constraint:
+        print(f"   ✓ Restricción de volumen global activada")
+    
+    # ===== DEBUGGING CRÍTICO: Verificar estado ANTES de posicionar =====
+    # Esto detecta problemas de estado persistente entre ejecuciones
+    import math
+    print(f"\n   🔍 DEBUGGING: Estado ANTES de posicionar cubo")
+    print(f"   {'='*60}")
+    
+    # 1. Verificar posiciones de partículas ANTES de posicionar
+    print(f"   📍 Posiciones de partículas (primeras 5, ANTES de posicionar):")
+    for i in range(min(5, len(system.particles))):
+        p = system.particles[i]
+        print(f"      Partícula {i}: ({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f})")
+    
+    # 2. Verificar V0 calculados
+    v0_validos = 0
+    v0_invalidos = 0
+    v0_min = float('inf')
+    v0_max = 0.0
+    v0_cero = 0
+    v0_negativos = 0
+    
+    print(f"   📊 Validación V0 (primeros 10 constraints):")
+    for i, constraint in enumerate(volume_constraints[:10]):
+        if constraint.V0 > 1e-6:
+            v0_validos += 1
+            v0_min = min(v0_min, constraint.V0)
+            v0_max = max(v0_max, constraint.V0)
+            if i < 3:
+                print(f"      Constraint {i}: V0 = {constraint.V0:.9f} ✓")
+        elif constraint.V0 < 0:
+            v0_negativos += 1
+            if i < 3:
+                print(f"      Constraint {i}: V0 = {constraint.V0:.9f} 🔴 NEGATIVO")
+        elif abs(constraint.V0) < 1e-6:
+            v0_cero += 1
+            if i < 3:
+                print(f"      Constraint {i}: V0 = {constraint.V0:.9f} 🔴 CERO")
+        else:
+            v0_invalidos += 1
+    
+    print(f"   📊 Resumen V0: {v0_validos} válidos, {v0_invalidos} inválidos, {v0_cero} cero, {v0_negativos} negativos")
+    if v0_validos > 0:
+        print(f"   📊 Rango V0 válidos: {v0_min:.9f} - {v0_max:.9f}")
+    
+    # 3. Verificar volúmenes ACTUALES de los tetraedros (para comparar con V0)
+    print(f"   📊 Volúmenes ACTUALES de tetraedros (primeros 3, ANTES de posicionar):")
+    for i, constraint in enumerate(volume_constraints[:3]):
+        p0, p1, p2, p3 = constraint.particles
+        e1 = p1.location - p0.location
+        e2 = p2.location - p0.location
+        e3 = p3.location - p0.location
+        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
+        V_actual = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
+        ratio = V_actual / constraint.V0 if abs(constraint.V0) > 1e-6 else 0.0
+        print(f"      Tetra {i}: V_actual = {V_actual:.9f}, V0 = {constraint.V0:.9f}, V/V0 = {ratio:.6f}")
+    
+    # 4. Validar posiciones iniciales de las partículas
+    pos_invalidas = 0
+    pos_anormales = []  # Posiciones que no están en el rango esperado del cubo
+    for i, particle in enumerate(system.particles):
+        if (math.isnan(particle.location.x) or math.isnan(particle.location.y) or math.isnan(particle.location.z) or
+            math.isinf(particle.location.x) or math.isinf(particle.location.y) or math.isinf(particle.location.z)):
+            pos_invalidas += 1
+            if i < 5:
+                print(f"   🔴 Partícula {i} tiene posición inválida: {particle.location}")
+        
+        # Verificar si la posición está fuera del rango esperado del cubo
+        # El cubo debería estar centrado en (0,0,0) con tamaño 'lado'
+        expected_range = lado / 2.0 + 0.1  # Margen de error
+        if (abs(particle.location.x) > expected_range or 
+            abs(particle.location.y) > expected_range or 
+            abs(particle.location.z) > expected_range):
+            pos_anormales.append((i, particle.location))
+    
+    if pos_invalidas > 0:
+        print(f"   🔴 ADVERTENCIA: {pos_invalidas} partículas con posiciones inválidas al inicio")
+    else:
+        print(f"   ✓ Todas las partículas tienen posiciones válidas al inicio")
+    
+    if len(pos_anormales) > 0:
+        print(f"   ⚠️ ADVERTENCIA: {len(pos_anormales)} partículas con posiciones fuera del rango esperado:")
+        for i, pos in pos_anormales[:5]:  # Mostrar primeras 5
+            print(f"      Partícula {i}: {pos}")
+    
+    print(f"   {'='*60}\n")
+    
+    # ===== PASO 4: Posicionar cubo a la altura inicial (ANTES de crear el mesh) =====
+    # En Blender, Z es el eje vertical, así que movemos en Z
+    offset_z = start_height - (lado / 2.0)  # Ajustar para que el cubo esté a start_height en Z
+    
+    # DEBUGGING: Verificar volúmenes ANTES de posicionar
+    print(f"   🔍 DEBUGGING: Volúmenes ANTES de posicionar (primeros 3):")
+    for i, constraint in enumerate(volume_constraints[:3]):
+        p0, p1, p2, p3 = constraint.particles
+        e1 = p1.location - p0.location
+        e2 = p2.location - p0.location
+        e3 = p3.location - p0.location
+        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
+        V_antes = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
+        ratio_antes = V_antes / constraint.V0 if abs(constraint.V0) > 1e-6 else 0.0
+        print(f"      Tetra {i}: V/V0 = {ratio_antes:.6f} (V={V_antes:.9f}, V0={constraint.V0:.9f})")
+    
+    # Posicionar partículas
+    for particle in system.particles:
+        particle.location.z += offset_z
+        particle.last_location.z += offset_z
+    
+    print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (offset_z = {offset_z:.6f})")
+    
+    # DEBUGGING: Verificar volúmenes DESPUÉS de posicionar
+    print(f"   🔍 DEBUGGING: Volúmenes DESPUÉS de posicionar (primeros 3):")
+    for i, constraint in enumerate(volume_constraints[:3]):
+        p0, p1, p2, p3 = constraint.particles
+        e1 = p1.location - p0.location
+        e2 = p2.location - p0.location
+        e3 = p3.location - p0.location
+        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
+        V_despues = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
+        ratio_despues = V_despues / constraint.V0 if abs(constraint.V0) > 1e-6 else 0.0
+        print(f"      Tetra {i}: V/V0 = {ratio_despues:.6f} (V={V_despues:.9f}, V0={constraint.V0:.9f})")
+        
+        # Si el volumen cambió significativamente solo por posicionar, hay un problema
+        if abs(ratio_despues - 1.0) > 0.01:
+            print(f"      ⚠️ ADVERTENCIA: Tetra {i} tiene V/V0 = {ratio_despues:.6f} después de posicionar (debería ser ~1.0)")
+    
+    # ===== PASO 5: Crear mesh de Blender usando las posiciones de las partículas =====
+    # Esto asegura que el mesh coincida exactamente con las partículas del sistema PBD
+    obj = crear_malla_cubo_blender(lado, subdivisiones)
+    
+    # CRÍTICO: Sincronizar posiciones del mesh con las partículas del sistema PBD
+    # El orden de los vértices en el mesh DEBE coincidir con el orden de las partículas
+    # Usamos el mismo algoritmo de generación para garantizar el orden
+    if len(obj.data.vertices) == len(system.particles):
+        # Generar las mismas posiciones que se usaron para crear las partículas
+        # para asegurar que el orden coincida
+        offset = lado / 2.0
+        step = lado / (subdivisiones - 1)
+        vertex_index = 0
+        
+        for z in range(subdivisiones):
+            for y in range(subdivisiones):
+                for x in range(subdivisiones):
+                    if vertex_index < len(obj.data.vertices):
+                        # Usar la posición de la partícula correspondiente
+                        # en lugar de recalcular (para evitar discrepancias)
+                        particle_index = z * subdivisiones * subdivisiones + y * subdivisiones + x
+                        if particle_index < len(system.particles):
+                            obj.data.vertices[vertex_index].co = system.particles[particle_index].location
+                        vertex_index += 1
+        
+        obj.data.update()
+        print(f"   ✓ Mesh sincronizado con posiciones de partículas ({len(obj.data.vertices)} vértices)")
+        
+        # Validación adicional: verificar que las posiciones coinciden
+        max_diff = 0.0
+        for i in range(min(len(obj.data.vertices), len(system.particles))):
+            diff = (obj.data.vertices[i].co - system.particles[i].location).length
+            max_diff = max(max_diff, diff)
+        if max_diff > 0.001:
+            print(f"   ⚠️ Advertencia: Diferencia máxima entre mesh y partículas: {max_diff:.6f}m")
+        else:
+            print(f"   ✓ Validación: Diferencia máxima < 0.001m ({max_diff:.9f}m)")
+    else:
+        print(f"   🔴 ERROR: Número de vértices del mesh ({len(obj.data.vertices)}) no coincide con partículas ({len(system.particles)})")
+        print(f"   🔴 Esto causará problemas de sincronización. Verificar generación de vértices.")
+    
+    # ===== PASO 6: Crear suelo si está habilitado =====
+    if scene.pbd_floor_enabled:
+        crear_suelo_blender(floor_height)
+        print(f"   ✓ Suelo creado a altura {floor_height}m")
+    
+    # ===== PASO 7: Añadir debugId a las partículas =====
+    for i in range(len(system.particles)):
+        system.particles[i].debugId = i
+    
+    # ===== PASO 8: Crear Shape Key base (Basis) =====
+    # Asegurar que no hay Shape Keys antes de crear el Basis
+    if obj.data.shape_keys:
+        print(f"   🗑️ Eliminando Shape Keys residuales...")
+        while obj.data.shape_keys and len(obj.data.shape_keys.key_blocks) > 0:
+            obj.shape_key_remove(obj.active_shape_key)
+    
+    # Crear Shape Key base (Basis) con las posiciones actuales
+    obj.shape_key_add(name="Basis")
+    print(f"   ✓ Shape Key 'Basis' creado")
+    
+    # Marcar como simulando
+    scene.pbd_cloth_is_simulating = True
+    
+    # Variables para logs de volumen
+    volumenes_iniciales = []
+    for constraint in volume_constraints:
+        # Calcular volumen inicial del tetraedro
+        p0, p1, p2, p3 = constraint.particles
+        e1 = p1.location - p0.location
+        e2 = p2.location - p0.location
+        e3 = p3.location - p0.location
+        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
+        V0 = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
+        volumenes_iniciales.append(V0)
+    
+    volumen_global_inicial = None
+    if global_constraint:
+        volumen_global_inicial = global_constraint.calcular_volumen()
+    
+    try:
+        # Simular frame por frame
+        for frame in range(1, num_frames + 1):
+            # Resetear fuerzas
+            for particle in system.particles:
+                particle.force = mathutils.Vector((0.0, 0.0, 0.0))
+            
+            # Aplicar gravedad (en dirección Z negativo para que caiga hacia abajo)
+            # En Blender, Z es el eje vertical (arriba/abajo)
+            gravity = mathutils.Vector((0.0, 0.0, gravity_value))  # gravity_value negativo = hacia abajo
+            for particle in system.particles:
+                if not particle.bloqueada:
+                    particle.force += gravity * particle.masa
+            
+            # Ejecutar solver PBD
+            try:
+                system.run(DT, apply_damping=True, use_plane_col=True, use_sphere_col=False, 
+                          use_shape_matching=False, debug_frame=frame if frame <= 3 else None,
+                          floor_height=floor_height)
+            except TypeError:
+                # Versión sin floor_height
+                system.run(DT, apply_damping=True, use_plane_col=True, use_sphere_col=False, 
+                          use_shape_matching=False)
+                # Aplicar colisión con suelo manualmente
+                if floor_height is not None:
+                    # Verificar que el método existe antes de llamarlo
+                    if hasattr(system, 'projectFloorCollision'):
+                        system.projectFloorCollision(DT, floor_height)
+                    else:
+                        # Fallback: aplicar colisión manualmente
+                        import math
+                        for particle in system.particles:
+                            if not particle.bloqueada and particle.location.z < floor_height:
+                                particle.location.z = floor_height
+                                if particle.velocity.z < 0:
+                                    restitution = 0.3
+                                    particle.velocity.z = -particle.velocity.z * restitution
+                                    friction = 0.8
+                                    particle.velocity.x *= friction
+                                    particle.velocity.y *= friction
+            
+            # Log de volúmenes (cada 10 frames o primeros 3)
+            if frame <= 3 or frame % 10 == 0:
+                # Calcular volúmenes actuales
+                volumenes_actuales = []
+                for i, constraint in enumerate(volume_constraints):
+                    p0, p1, p2, p3 = constraint.particles
+                    e1 = p1.location - p0.location
+                    e2 = p2.location - p0.location
+                    e3 = p3.location - p0.location
+                    cross_e1_e2 = mathutils.Vector.cross(e1, e2)
+                    V = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
+                    volumenes_actuales.append(V)
+                    
+                    if i < 3:  # Log de primeros 3 tetraedros
+                        V0 = volumenes_iniciales[i]
+                        ratio = V / V0 if abs(V0) > 0.0001 else 0.0
+                        print(f"   📊 Frame {frame}, Tetra {i}: V/V0 = {ratio:.6f} (V={V:.6f}, V0={V0:.6f})")
+                
+                # Volumen global si está activo
+                if global_constraint:
+                    V_global = global_constraint.calcular_volumen()
+                    ratio_global = V_global / volumen_global_inicial if abs(volumen_global_inicial) > 0.0001 else 0.0
+                    print(f"   📊 Frame {frame}, Volumen Global: V/V0 = {ratio_global:.6f}")
+            
+            # CRÍTICO: Actualizar mesh base con las posiciones actuales usando el mismo orden
+            # que se usó para crear las partículas (z, y, x) para garantizar correspondencia correcta
+            vertex_index = 0
+            for z in range(subdivisiones):
+                for y in range(subdivisiones):
+                    for x in range(subdivisiones):
+                        if vertex_index < len(obj.data.vertices):
+                            particle_index = z * subdivisiones * subdivisiones + y * subdivisiones + x
+                            if particle_index < len(system.particles):
+                                obj.data.vertices[vertex_index].co = system.particles[particle_index].location
+                            vertex_index += 1
+            obj.data.update()
+            
+            # Crear Shape Key para este frame
+            shape_key_name = f"sim_{frame:04d}"
+            shape_key = obj.shape_key_add(name=shape_key_name)
+            
+            # CRÍTICO: Actualizar posiciones de vértices en el Shape Key usando el mismo orden
+            vertex_index = 0
+            for z in range(subdivisiones):
+                for y in range(subdivisiones):
+                    for x in range(subdivisiones):
+                        if vertex_index < len(shape_key.data):
+                            particle_index = z * subdivisiones * subdivisiones + y * subdivisiones + x
+                            if particle_index < len(system.particles):
+                                shape_key.data[vertex_index].co = system.particles[particle_index].location
+                            vertex_index += 1
+            
+            # Log de progreso
+            if frame == 1 or frame % 10 == 0:
+                progreso = (frame / num_frames) * 100
+                print(f"   ✅ Frame {frame}/{num_frames} ({progreso:.1f}%) - Shape Key '{shape_key_name}' creado")
+        
+        print(f"\n   ✅ Simulación completada: {num_frames} frames")
+        
+        # Crear animación con keyframes
+        crear_animacion_shapekeys(obj, num_frames)
+        
+        print(f"\n   ✅ Animación creada con keyframes")
+        
+    except Exception as e:
+        print(f"\n   ❌ ERROR durante la simulación: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+    finally:
+        scene.pbd_cloth_is_simulating = False
+        print(f"\n   ✅ Flag de simulación reseteado")
+
+
+# ============================================
 # REGISTRO DE CLASES
 # ============================================
 classes = [
@@ -1264,7 +2011,8 @@ classes = [
     PBD_CLOTH_OT_SimularShapeKeys,
     PBD_CLOTH_OT_ResetSimulando,
     PBD_CLOTH_OT_DiagnosticarKeyframes,
-    PBD_CLOTH_OT_ForzarActualizacion
+    PBD_CLOTH_OT_ForzarActualizacion,
+    PBD_CLOTH_OT_SimularCuboVolumen
 ]
 
 
