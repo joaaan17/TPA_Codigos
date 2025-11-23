@@ -23,10 +23,10 @@ class PBDSystem:
         self.shapeMatching = None  # Shape Matching (opcional, para soft-bodies)
         
         # Crear partículas iniciales
-        # CRÍTICO: Crear nuevos Vectors para cada partícula para evitar referencias compartidas
+        p = mathutils.Vector((0, 0, 0))
+        v = mathutils.Vector((0, 0, 0))
+        
         for i in range(n):
-            p = mathutils.Vector((0, 0, 0))  # Nuevo Vector para cada partícula
-            v = mathutils.Vector((0, 0, 0))  # Nuevo Vector para cada partícula
             self.particles.append(Particle(p, v, mass))
     
     def set_n_iters(self, n):
@@ -155,12 +155,7 @@ class PBDSystem:
             
             # Aplicar restricciones de volumen múltiples veces para mayor estabilidad
             # Esto es crítico cuando hay compresión fuerte
-            # Aumentar iteraciones en las primeras iteraciones del solver (cuando hay más compresión)
-            if it < 2:  # Primeras 2 iteraciones del solver
-                num_volume_iterations = 4  # 4 veces para mayor estabilidad al inicio
-            else:
-                num_volume_iterations = 3  # 3 veces para el resto
-            
+            num_volume_iterations = 2  # Aplicar 2 veces por iteración del solver
             for vol_iter in range(num_volume_iterations):
                 # Proyectar restricciones de volumen por tetraedros
                 self.projectConstraintsOfType(VolumeConstraintTet)

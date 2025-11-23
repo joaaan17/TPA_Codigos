@@ -62,45 +62,11 @@ class VolumeConstraintTet(Constraint):
         if math.isnan(V) or math.isinf(V):
             return
         
-        # CRÍTICO: Detectar compresión extrema o inversión ANTES de que sea demasiado tarde
-        # Calcular ratio de compresión
-        compression_ratio = abs(V) / abs(self.V0) if abs(self.V0) > 1e-6 else 0.0
-        
-        # Si el volumen es negativo, el tetraedro está invertido - CORRECCIÓN INMEDIATA
-        if V < 0:
-            # Tetraedro invertido - aplicar corrección de emergencia agresiva
-            # Calcular normal del plano formado por las 3 primeras partículas
-            normal = mathutils.Vector.cross(e1, e2)
-            if normal.length_squared < 1e-10:
-                # Si e1 y e2 son paralelos, usar e1 y e3
-                normal = mathutils.Vector.cross(e1, e3)
-            
-            if normal.length_squared > 1e-10:
-                normal.normalize()
-                # Empujar las partículas para restaurar el volumen
-                # Usar una distancia más grande para corregir la inversión
-                push_distance = abs(self.V0) ** (1.0/3.0) * 0.3  # 30% de la arista característica
-                
-                # Empujar p3 en dirección de la normal, y las otras en dirección opuesta
-                if not p3.bloqueada:
-                    p3.location += normal * push_distance * self.k_coef
-                if not p0.bloqueada:
-                    p0.location -= normal * push_distance * self.k_coef * 0.33
-                if not p1.bloqueada:
-                    p1.location -= normal * push_distance * self.k_coef * 0.33
-                if not p2.bloqueada:
-                    p2.location -= normal * push_distance * self.k_coef * 0.33
-                
-                # Log para debugging
-                if hasattr(p0, 'debugId') and p0.debugId == 0:
-                    print(f"   ⚠️ Tetraedro INVERTIDO detectado (V={V:.9f}, V0={self.V0:.9f}) - Aplicando corrección de emergencia")
-            
-            # Salir después de aplicar corrección de emergencia
-            return
-        
-        # CRÍTICO: Si el volumen es cero o muy pequeño (< 1% del original), aplicar corrección de emergencia
-        if abs(V) < 1e-10 or compression_ratio < 0.01:
-            # Tetraedro completamente aplastado - aplicar corrección de emergencia más agresiva
+        # CRÍTICO: Si el volumen es cero o negativo, el tetraedro está completamente aplastado
+        # En este caso, los gradientes son cero y la restricción NO PUEDE funcionar
+        # Debemos aplicar una corrección de emergencia basada en la geometría
+        if abs(V) < 1e-10:
+            # Tetraedro completamente aplastado - aplicar corrección de emergencia
             # Empujar las partículas en la dirección de la normal del plano
             # Calcular normal del plano formado por las 3 primeras partículas
             normal = mathutils.Vector.cross(e1, e2)
@@ -110,24 +76,16 @@ class VolumeConstraintTet(Constraint):
             
             if normal.length_squared > 1e-10:
                 normal.normalize()
-                # Empujar las partículas para restaurar el volumen
-                # Usar una distancia más grande para corregir el aplastamiento
-                push_distance = abs(self.V0) ** (1.0/3.0) * 0.25  # 25% de la arista característica (aumentado de 0.1)
+                # Empujar todas las partículas en la dirección de la normal
+                # La magnitud debe ser proporcional al volumen objetivo
+                push_distance = abs(self.V0) ** (1.0/3.0) * 0.1  # Aproximación de la arista característica
                 
-                # Empujar p3 en dirección de la normal, y las otras en dirección opuesta
-                # Esto crea una separación que restaura el volumen
-                if not p3.bloqueada:
-                    p3.location += normal * push_distance * self.k_coef
-                if not p0.bloqueada:
-                    p0.location -= normal * push_distance * self.k_coef * 0.33
-                if not p1.bloqueada:
-                    p1.location -= normal * push_distance * self.k_coef * 0.33
-                if not p2.bloqueada:
-                    p2.location -= normal * push_distance * self.k_coef * 0.33
-                
-                # Log para debugging (solo si es muy crítico)
-                if compression_ratio < 0.001 and hasattr(p0, 'debugId') and p0.debugId == 0:
-                    print(f"   ⚠️ Tetraedro APLASTADO detectado (V={V:.9f}, V0={self.V0:.9f}, ratio={compression_ratio:.6f}) - Aplicando corrección de emergencia")
+                for i, p in enumerate(self.particles):
+                    if not p.bloqueada:
+                        # Empujar en dirección de la normal (alternando signo para expandir)
+                        sign = 1.0 if i % 2 == 0 else -1.0
+                        correction = normal * push_distance * sign * self.k_coef
+                        p.location += correction
             
             # Salir después de aplicar corrección de emergencia
             return
@@ -183,16 +141,10 @@ class VolumeConstraintTet(Constraint):
         # Δp_i = -w_i * (C / denom) * k' * grad_i
         
         # Si el tetraedro está muy comprimido, aumentar la fuerza de corrección
-        # Usar el compression_ratio calculado arriba
-        if compression_ratio < 0.5:  # Menos del 50% del volumen original
+        compression_ratio = abs(V) / abs(self.V0) if abs(self.V0) > 1e-6 else 1.0
+        if compression_ratio < 0.1:  # Menos del 10% del volumen original
             # Aumentar k_coef temporalmente para corrección de emergencia
-            # Cuanto más comprimido, más fuerza aplicar
-            if compression_ratio < 0.1:
-                effective_k_coef = min(1.0, self.k_coef * 5.0)  # 5x para compresión extrema
-            elif compression_ratio < 0.3:
-                effective_k_coef = min(1.0, self.k_coef * 3.0)  # 3x para compresión fuerte
-            else:
-                effective_k_coef = min(1.0, self.k_coef * 2.0)  # 2x para compresión moderada
+            effective_k_coef = min(1.0, self.k_coef * 3.0)  # Triplicar la fuerza
         else:
             effective_k_coef = self.k_coef
         

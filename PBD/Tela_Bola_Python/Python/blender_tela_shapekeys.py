@@ -1649,27 +1649,17 @@ def simular_cubo_volumen(context):
     # ===== PASO 2: Importar y recargar módulos =====
     import sys
     import importlib
-    import gc  # Garbage collector para limpiar referencias
     
-    # FORZAR LIMPIEZA COMPLETA: Eliminar referencias a módulos anteriores
-    # Esto es crítico para evitar estado persistente entre ejecuciones
+    # Recargar módulos si ya están cargados (evitar caché)
     modules_to_reload = ['CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal', 'PBDSystem', 'Particle']
-    
-    # Primero, eliminar referencias de sys.modules
     for module_name in modules_to_reload:
         if module_name in sys.modules:
-            del sys.modules[module_name]
-            print(f"   🗑️ Módulo '{module_name}' eliminado de sys.modules")
+            importlib.reload(sys.modules[module_name])
+            print(f"   🔄 Módulo '{module_name}' recargado")
     
-    # Forzar garbage collection para limpiar objetos huérfanos
-    gc.collect()
-    
-    # Ahora importar módulos frescos
     from CuboVolumen import crear_cubo_volumen
     from VolumeConstraintTet import VolumeConstraintTet
     from VolumeConstraintGlobal import VolumeConstraintGlobal
-    
-    print(f"   ✓ Módulos importados desde cero (sin estado persistente)")
     
     # ===== PASO 3: Crear sistema PBD PRIMERO (antes del mesh de Blender) =====
     # Esto asegura que los V0 se calculen sobre posiciones limpias
@@ -1684,170 +1674,28 @@ def simular_cubo_volumen(context):
     if global_constraint:
         print(f"   ✓ Restricción de volumen global activada")
     
-    # ===== DEBUGGING CRÍTICO: Verificar estado ANTES de posicionar =====
-    # Esto detecta problemas de estado persistente entre ejecuciones
-    import math
-    print(f"\n   🔍 DEBUGGING: Estado ANTES de posicionar cubo")
-    print(f"   {'='*60}")
-    
-    # 1. Verificar posiciones de partículas ANTES de posicionar
-    print(f"   📍 Posiciones de partículas (primeras 5, ANTES de posicionar):")
-    for i in range(min(5, len(system.particles))):
-        p = system.particles[i]
-        print(f"      Partícula {i}: ({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f})")
-    
-    # 2. Verificar V0 calculados
-    v0_validos = 0
-    v0_invalidos = 0
-    v0_min = float('inf')
-    v0_max = 0.0
-    v0_cero = 0
-    v0_negativos = 0
-    
-    print(f"   📊 Validación V0 (primeros 10 constraints):")
-    for i, constraint in enumerate(volume_constraints[:10]):
-        if constraint.V0 > 1e-6:
-            v0_validos += 1
-            v0_min = min(v0_min, constraint.V0)
-            v0_max = max(v0_max, constraint.V0)
-            if i < 3:
-                print(f"      Constraint {i}: V0 = {constraint.V0:.9f} ✓")
-        elif constraint.V0 < 0:
-            v0_negativos += 1
-            if i < 3:
-                print(f"      Constraint {i}: V0 = {constraint.V0:.9f} 🔴 NEGATIVO")
-        elif abs(constraint.V0) < 1e-6:
-            v0_cero += 1
-            if i < 3:
-                print(f"      Constraint {i}: V0 = {constraint.V0:.9f} 🔴 CERO")
-        else:
-            v0_invalidos += 1
-    
-    print(f"   📊 Resumen V0: {v0_validos} válidos, {v0_invalidos} inválidos, {v0_cero} cero, {v0_negativos} negativos")
-    if v0_validos > 0:
-        print(f"   📊 Rango V0 válidos: {v0_min:.9f} - {v0_max:.9f}")
-    
-    # 3. Verificar volúmenes ACTUALES de los tetraedros (para comparar con V0)
-    print(f"   📊 Volúmenes ACTUALES de tetraedros (primeros 3, ANTES de posicionar):")
-    for i, constraint in enumerate(volume_constraints[:3]):
-        p0, p1, p2, p3 = constraint.particles
-        e1 = p1.location - p0.location
-        e2 = p2.location - p0.location
-        e3 = p3.location - p0.location
-        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
-        V_actual = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
-        ratio = V_actual / constraint.V0 if abs(constraint.V0) > 1e-6 else 0.0
-        print(f"      Tetra {i}: V_actual = {V_actual:.9f}, V0 = {constraint.V0:.9f}, V/V0 = {ratio:.6f}")
-    
-    # 4. Validar posiciones iniciales de las partículas
-    pos_invalidas = 0
-    pos_anormales = []  # Posiciones que no están en el rango esperado del cubo
-    for i, particle in enumerate(system.particles):
-        if (math.isnan(particle.location.x) or math.isnan(particle.location.y) or math.isnan(particle.location.z) or
-            math.isinf(particle.location.x) or math.isinf(particle.location.y) or math.isinf(particle.location.z)):
-            pos_invalidas += 1
-            if i < 5:
-                print(f"   🔴 Partícula {i} tiene posición inválida: {particle.location}")
-        
-        # Verificar si la posición está fuera del rango esperado del cubo
-        # El cubo debería estar centrado en (0,0,0) con tamaño 'lado'
-        expected_range = lado / 2.0 + 0.1  # Margen de error
-        if (abs(particle.location.x) > expected_range or 
-            abs(particle.location.y) > expected_range or 
-            abs(particle.location.z) > expected_range):
-            pos_anormales.append((i, particle.location))
-    
-    if pos_invalidas > 0:
-        print(f"   🔴 ADVERTENCIA: {pos_invalidas} partículas con posiciones inválidas al inicio")
-    else:
-        print(f"   ✓ Todas las partículas tienen posiciones válidas al inicio")
-    
-    if len(pos_anormales) > 0:
-        print(f"   ⚠️ ADVERTENCIA: {len(pos_anormales)} partículas con posiciones fuera del rango esperado:")
-        for i, pos in pos_anormales[:5]:  # Mostrar primeras 5
-            print(f"      Partícula {i}: {pos}")
-    
-    print(f"   {'='*60}\n")
-    
     # ===== PASO 4: Posicionar cubo a la altura inicial (ANTES de crear el mesh) =====
     # En Blender, Z es el eje vertical, así que movemos en Z
     offset_z = start_height - (lado / 2.0)  # Ajustar para que el cubo esté a start_height en Z
-    
-    # DEBUGGING: Verificar volúmenes ANTES de posicionar
-    print(f"   🔍 DEBUGGING: Volúmenes ANTES de posicionar (primeros 3):")
-    for i, constraint in enumerate(volume_constraints[:3]):
-        p0, p1, p2, p3 = constraint.particles
-        e1 = p1.location - p0.location
-        e2 = p2.location - p0.location
-        e3 = p3.location - p0.location
-        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
-        V_antes = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
-        ratio_antes = V_antes / constraint.V0 if abs(constraint.V0) > 1e-6 else 0.0
-        print(f"      Tetra {i}: V/V0 = {ratio_antes:.6f} (V={V_antes:.9f}, V0={constraint.V0:.9f})")
-    
-    # Posicionar partículas
     for particle in system.particles:
         particle.location.z += offset_z
         particle.last_location.z += offset_z
     
-    print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (offset_z = {offset_z:.6f})")
-    
-    # DEBUGGING: Verificar volúmenes DESPUÉS de posicionar
-    print(f"   🔍 DEBUGGING: Volúmenes DESPUÉS de posicionar (primeros 3):")
-    for i, constraint in enumerate(volume_constraints[:3]):
-        p0, p1, p2, p3 = constraint.particles
-        e1 = p1.location - p0.location
-        e2 = p2.location - p0.location
-        e3 = p3.location - p0.location
-        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
-        V_despues = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
-        ratio_despues = V_despues / constraint.V0 if abs(constraint.V0) > 1e-6 else 0.0
-        print(f"      Tetra {i}: V/V0 = {ratio_despues:.6f} (V={V_despues:.9f}, V0={constraint.V0:.9f})")
-        
-        # Si el volumen cambió significativamente solo por posicionar, hay un problema
-        if abs(ratio_despues - 1.0) > 0.01:
-            print(f"      ⚠️ ADVERTENCIA: Tetra {i} tiene V/V0 = {ratio_despues:.6f} después de posicionar (debería ser ~1.0)")
+    print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m")
     
     # ===== PASO 5: Crear mesh de Blender usando las posiciones de las partículas =====
     # Esto asegura que el mesh coincida exactamente con las partículas del sistema PBD
     obj = crear_malla_cubo_blender(lado, subdivisiones)
     
-    # CRÍTICO: Sincronizar posiciones del mesh con las partículas del sistema PBD
-    # El orden de los vértices en el mesh DEBE coincidir con el orden de las partículas
-    # Usamos el mismo algoritmo de generación para garantizar el orden
+    # Sincronizar posiciones del mesh con las partículas del sistema PBD
+    # Esto es crítico para que el mesh inicial coincida con las partículas
     if len(obj.data.vertices) == len(system.particles):
-        # Generar las mismas posiciones que se usaron para crear las partículas
-        # para asegurar que el orden coincida
-        offset = lado / 2.0
-        step = lado / (subdivisiones - 1)
-        vertex_index = 0
-        
-        for z in range(subdivisiones):
-            for y in range(subdivisiones):
-                for x in range(subdivisiones):
-                    if vertex_index < len(obj.data.vertices):
-                        # Usar la posición de la partícula correspondiente
-                        # en lugar de recalcular (para evitar discrepancias)
-                        particle_index = z * subdivisiones * subdivisiones + y * subdivisiones + x
-                        if particle_index < len(system.particles):
-                            obj.data.vertices[vertex_index].co = system.particles[particle_index].location
-                        vertex_index += 1
-        
+        for i, vertex in enumerate(obj.data.vertices):
+            vertex.co = system.particles[i].location
         obj.data.update()
-        print(f"   ✓ Mesh sincronizado con posiciones de partículas ({len(obj.data.vertices)} vértices)")
-        
-        # Validación adicional: verificar que las posiciones coinciden
-        max_diff = 0.0
-        for i in range(min(len(obj.data.vertices), len(system.particles))):
-            diff = (obj.data.vertices[i].co - system.particles[i].location).length
-            max_diff = max(max_diff, diff)
-        if max_diff > 0.001:
-            print(f"   ⚠️ Advertencia: Diferencia máxima entre mesh y partículas: {max_diff:.6f}m")
-        else:
-            print(f"   ✓ Validación: Diferencia máxima < 0.001m ({max_diff:.9f}m)")
+        print(f"   ✓ Mesh sincronizado con posiciones de partículas")
     else:
-        print(f"   🔴 ERROR: Número de vértices del mesh ({len(obj.data.vertices)}) no coincide con partículas ({len(system.particles)})")
-        print(f"   🔴 Esto causará problemas de sincronización. Verificar generación de vértices.")
+        print(f"   ⚠️ Advertencia: Número de vértices del mesh ({len(obj.data.vertices)}) no coincide con partículas ({len(system.particles)})")
     
     # ===== PASO 6: Crear suelo si está habilitado =====
     if scene.pbd_floor_enabled:
@@ -1953,33 +1801,20 @@ def simular_cubo_volumen(context):
                     ratio_global = V_global / volumen_global_inicial if abs(volumen_global_inicial) > 0.0001 else 0.0
                     print(f"   📊 Frame {frame}, Volumen Global: V/V0 = {ratio_global:.6f}")
             
-            # CRÍTICO: Actualizar mesh base con las posiciones actuales usando el mismo orden
-            # que se usó para crear las partículas (z, y, x) para garantizar correspondencia correcta
-            vertex_index = 0
-            for z in range(subdivisiones):
-                for y in range(subdivisiones):
-                    for x in range(subdivisiones):
-                        if vertex_index < len(obj.data.vertices):
-                            particle_index = z * subdivisiones * subdivisiones + y * subdivisiones + x
-                            if particle_index < len(system.particles):
-                                obj.data.vertices[vertex_index].co = system.particles[particle_index].location
-                            vertex_index += 1
+            # Actualizar mesh base con las posiciones actuales (para visualización en tiempo real)
+            for i, vertex in enumerate(obj.data.vertices):
+                if i < len(system.particles):
+                    vertex.co = system.particles[i].location
             obj.data.update()
             
             # Crear Shape Key para este frame
             shape_key_name = f"sim_{frame:04d}"
             shape_key = obj.shape_key_add(name=shape_key_name)
             
-            # CRÍTICO: Actualizar posiciones de vértices en el Shape Key usando el mismo orden
-            vertex_index = 0
-            for z in range(subdivisiones):
-                for y in range(subdivisiones):
-                    for x in range(subdivisiones):
-                        if vertex_index < len(shape_key.data):
-                            particle_index = z * subdivisiones * subdivisiones + y * subdivisiones + x
-                            if particle_index < len(system.particles):
-                                shape_key.data[vertex_index].co = system.particles[particle_index].location
-                            vertex_index += 1
+            # Actualizar posiciones de vértices en el Shape Key
+            for i, vertex in enumerate(obj.data.vertices):
+                if i < len(system.particles):
+                    shape_key.data[i].co = system.particles[i].location
             
             # Log de progreso
             if frame == 1 or frame % 10 == 0:

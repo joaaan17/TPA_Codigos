@@ -7,6 +7,7 @@ import math
 from PBDSystem import PBDSystem
 from VolumeConstraintTet import VolumeConstraintTet
 from VolumeConstraintGlobal import VolumeConstraintGlobal
+from DistanceConstraint import DistanceConstraint
 
 
 def calcular_volumen_tetraedro(p0, p1, p2, p3):
@@ -260,28 +261,15 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
     system = PBDSystem(N, masa_particula)
     
     # Inicializar partículas en las posiciones de los vértices
-    # CRÍTICO: Asegurar que las partículas se inicializan con posiciones limpias
-    import math
     for i, pos in enumerate(vertices_pos):
-        # Crear nuevo Vector para evitar referencias compartidas
-        new_pos = mathutils.Vector((pos.x, pos.y, pos.z))
-        system.particles[i].location = new_pos
-        system.particles[i].last_location = mathutils.Vector((pos.x, pos.y, pos.z))
-        
-        # Validar que la posición se asignó correctamente
-        if i < 3:  # Debug para primeras 3 partículas
-            if (math.isnan(system.particles[i].location.x) or 
-                math.isnan(system.particles[i].location.y) or 
-                math.isnan(system.particles[i].location.z)):
-                print(f"   🔴 ERROR: Partícula {i} tiene NaN después de inicialización: {system.particles[i].location}")
+        system.particles[i].location = mathutils.Vector(pos)
+        system.particles[i].last_location = mathutils.Vector(pos)
     
     # ===== 2. Generar tetraedros interiores =====
     tetraedros_indices = generar_tetraedros_cubo_subdividido(subdivisiones)
     
     # ===== 3. Calcular volúmenes iniciales (V0) de cada tetraedro =====
     volume_constraints = []
-    v0_problemas = []  # Para debugging
-    
     for tet in tetraedros_indices:
         i0, i1, i2, i3 = tet
         # Validar índices
@@ -293,48 +281,71 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
         p2 = system.particles[i2]
         p3 = system.particles[i3]
         
-        # DEBUGGING: Verificar posiciones antes de calcular V0
-        if len(volume_constraints) < 3:  # Solo para primeros 3
-            import math
-            if (math.isnan(p0.location.x) or math.isnan(p1.location.x) or 
-                math.isnan(p2.location.x) or math.isnan(p3.location.x)):
-                print(f"   🔴 ERROR: Tetraedro {len(volume_constraints)} tiene partículas con NaN antes de calcular V0")
-        
         # Calcular volumen inicial
         V0 = calcular_volumen_tetraedro(
             p0.location, p1.location, p2.location, p3.location
         )
-        
-        # DEBUGGING: Verificar V0 calculado
-        if len(volume_constraints) < 3:  # Solo para primeros 3
-            print(f"   🔍 DEBUG: Tetraedro {len(volume_constraints)} - V0 calculado = {V0:.9f}")
-            print(f"      p0: {p0.location}, p1: {p1.location}, p2: {p2.location}, p3: {p3.location}")
         
         # Solo crear constraint si el volumen es válido (positivo y no demasiado pequeño)
         if V0 > 1e-6:
             constraint = VolumeConstraintTet(p0, p1, p2, p3, V0, stiffness_volumen)
             volume_constraints.append(constraint)
             system.add_constraint(constraint)
-        else:
-            # Guardar información sobre V0 inválido para debugging
-            if len(v0_problemas) < 5:
-                v0_problemas.append({
-                    'tet': len(volume_constraints),
-                    'V0': V0,
-                    'p0': p0.location.copy(),
-                    'p1': p1.location.copy(),
-                    'p2': p2.location.copy(),
-                    'p3': p3.location.copy()
-                })
     
-    # DEBUGGING: Reportar V0 problemáticos
-    if len(v0_problemas) > 0:
-        print(f"   ⚠️ ADVERTENCIA: {len(v0_problemas)} tetraedros con V0 inválido (primeros 5):")
-        for prob in v0_problemas:
-            print(f"      Tetra {prob['tet']}: V0 = {prob['V0']:.9f}")
-            print(f"         p0: {prob['p0']}, p1: {prob['p1']}, p2: {prob['p2']}, p3: {prob['p3']}")
+    # ===== 4. Crear restricciones de DISTANCIA para mantener la forma del cubo =====
+    # INTENCIÓN: Mantener las aristas a su longitud natural, evitando que el cubo se estire
+    distance_constraints = []
+    distance_stiffness = 0.9  # Alta rigidez para mantener la forma
     
-    # ===== 4. (Opcional) Crear restricción de volumen global =====
+    # Calcular distancia esperada entre vértices adyacentes
+    step = lado / (subdivisiones - 1) if subdivisiones > 1 else lado
+    
+    # Crear restricciones de distancia en las 3 direcciones (X, Y, Z)
+    for z in range(subdivisiones):
+        for y in range(subdivisiones):
+            for x in range(subdivisiones):
+                idx = z * subdivisiones * subdivisiones + y * subdivisiones + x
+                
+                # Restricción en dirección X (vértice adyacente a la derecha)
+                if x < subdivisiones - 1:
+                    idx_right = z * subdivisiones * subdivisiones + y * subdivisiones + (x + 1)
+                    if idx < N and idx_right < N:
+                        p0 = system.particles[idx]
+                        p1 = system.particles[idx_right]
+                        # Calcular distancia inicial
+                        dist0 = (p1.location - p0.location).length
+                        if dist0 > 1e-6:
+                            constraint = DistanceConstraint(p0, p1, dist0, distance_stiffness)
+                            distance_constraints.append(constraint)
+                            system.add_constraint(constraint)
+                
+                # Restricción en dirección Y (vértice adyacente arriba)
+                if y < subdivisiones - 1:
+                    idx_up = z * subdivisiones * subdivisiones + (y + 1) * subdivisiones + x
+                    if idx < N and idx_up < N:
+                        p0 = system.particles[idx]
+                        p1 = system.particles[idx_up]
+                        dist0 = (p1.location - p0.location).length
+                        if dist0 > 1e-6:
+                            constraint = DistanceConstraint(p0, p1, dist0, distance_stiffness)
+                            distance_constraints.append(constraint)
+                            system.add_constraint(constraint)
+                
+                # Restricción en dirección Z (vértice adyacente arriba en Z)
+                if z < subdivisiones - 1:
+                    idx_front = (z + 1) * subdivisiones * subdivisiones + y * subdivisiones + x
+                    if idx < N and idx_front < N:
+                        p0 = system.particles[idx]
+                        p1 = system.particles[idx_front]
+                        dist0 = (p1.location - p0.location).length
+                        if dist0 > 1e-6:
+                            constraint = DistanceConstraint(p0, p1, dist0, distance_stiffness)
+                            distance_constraints.append(constraint)
+                            system.add_constraint(constraint)
+    
+    print(f"   ✓ {len(distance_constraints)} restricciones de distancia creadas para mantener forma cúbica")
+    
+    # ===== 5. (Opcional) Crear restricción de volumen global =====
     global_volume_constraint = None
     if stiffness_global is not None and stiffness_global > 0:
         # Calcular volumen global inicial
