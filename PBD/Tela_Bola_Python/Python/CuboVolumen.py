@@ -8,6 +8,7 @@ from PBDSystem import PBDSystem
 from VolumeConstraintTet import VolumeConstraintTet
 from VolumeConstraintGlobal import VolumeConstraintGlobal
 from DistanceConstraint import DistanceConstraint
+from BendingConstraint import BendingConstraint
 
 
 def calcular_volumen_tetraedro(p0, p1, p2, p3):
@@ -261,9 +262,14 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
     system = PBDSystem(N, masa_particula)
     
     # Inicializar partículas en las posiciones de los vértices
+    # CRÍTICO: Asegurar que las velocidades y fuerzas estén en cero
     for i, pos in enumerate(vertices_pos):
         system.particles[i].location = mathutils.Vector(pos)
         system.particles[i].last_location = mathutils.Vector(pos)
+        # CRÍTICO: Asegurar que velocidad y fuerza estén en cero para evitar deformación inicial
+        system.particles[i].velocity = mathutils.Vector((0.0, 0.0, 0.0))
+        system.particles[i].force = mathutils.Vector((0.0, 0.0, 0.0))
+        system.particles[i].acceleration = mathutils.Vector((0.0, 0.0, 0.0))
     
     # ===== 2. Generar tetraedros interiores =====
     tetraedros_indices = generar_tetraedros_cubo_subdividido(subdivisiones)
@@ -295,7 +301,7 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
     # ===== 4. Crear restricciones de DISTANCIA para mantener la forma del cubo =====
     # INTENCIÓN: Mantener las aristas a su longitud natural, evitando que el cubo se estire
     distance_constraints = []
-    distance_stiffness = 0.9  # Alta rigidez para mantener la forma
+    distance_stiffness = 0.5  # REDUCIDO para evitar conflictos con volumen
     
     # Calcular distancia esperada entre vértices adyacentes
     step = lado / (subdivisiones - 1) if subdivisiones > 1 else lado
@@ -345,7 +351,349 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
     
     print(f"   ✓ {len(distance_constraints)} restricciones de distancia creadas para mantener forma cúbica")
     
-    # ===== 5. (Opcional) Crear restricción de volumen global =====
+    # ===== 5. Crear restricciones de BENDING (ángulo) SOLO en las CARAS externas =====
+    # INTENCIÓN: Limitar la torsión entre triángulos adyacentes en la superficie
+    # Evita que las caras se doblen de manera no deseada
+    # CRÍTICO: Solo aplicar en caras externas, NUNCA en el volumen interno
+    bending_constraints = []
+    bending_stiffness = 0.05  # EXTREMADAMENTE REDUCIDO - las correcciones son demasiado grandes
+    
+    def calcular_phi0(p1, p2, p3, p4):
+        """
+        Calcular el ángulo diedro inicial entre dos triángulos adyacentes
+        Según BendingConstraint: p1, p2, p3, p4 donde:
+        - p1: vértice libre triángulo A
+        - p2, p3: arista compartida
+        - p4: vértice libre triángulo B
+        Triángulo A: (p1, p2, p3)
+        Triángulo B: (p4, p2, p3)
+        Arista compartida: (p2, p3)
+        """
+        # Calcular vectores desde la arista compartida (p2, p3)
+        e1 = p2.location - p1.location  # Vector desde p1 a p2 (arista compartida)
+        e2 = p3.location - p1.location  # Vector desde p1 a p3
+        e3 = p4.location - p1.location  # Vector desde p1 a p4
+        
+        # Calcular normales de los triángulos
+        # Normal triángulo A: cross(p2-p1, p3-p1)
+        n1 = mathutils.Vector.cross(e1, e2)
+        # Normal triángulo B: cross(p2-p1, p4-p1)  
+        n2 = mathutils.Vector.cross(e1, e3)
+        
+        len_n1 = n1.length
+        len_n2 = n2.length
+        
+        if len_n1 < 0.0001 or len_n2 < 0.0001:
+            # Si las normales son degeneradas, retornar un ángulo por defecto
+            # Para un cubo perfecto, el ángulo diedro debería ser ~90° (1.57 rad) o ~180° (3.14 rad)
+            return math.pi / 2.0  # 90 grados por defecto
+        
+        n1 = n1.normalized()
+        n2 = n2.normalized()
+        
+        d = n1.dot(n2)
+        d = max(-1.0, min(1.0, d))
+        
+        # CRÍTICO: El ángulo diedro se calcula como acos(d), pero hay un problema:
+        # Cuando dos triángulos están en el mismo plano (cara plana), las normales son paralelas
+        # y d = 1.0, entonces acos(1.0) = 0.0. Pero el ángulo diedro entre dos triángulos
+        # en el mismo plano debería ser 180° (π rad), no 0°.
+        #
+        # Sin embargo, según la definición de Müller 2007, el ángulo diedro es el ángulo
+        # entre las normales de los triángulos. Si las normales son paralelas (d=1.0),
+        # el ángulo es 0°, lo cual es correcto matemáticamente.
+        #
+        # El problema es que cuando el cubo se deforma, el ángulo cambia y la restricción
+        # intenta corregirlo, pero si phi0=0.0, cualquier cambio genera correcciones enormes.
+        #
+        # SOLUCIÓN: Si d está muy cerca de 1.0, significa que los triángulos están
+        # casi en el mismo plano. En este caso, usamos un valor pequeño pero no cero
+        # para evitar correcciones extremas.
+        
+        if abs(d - 1.0) < 0.001:  # Normales casi paralelas (triángulos en mismo plano)
+            # Usar un valor pequeño pero no cero para evitar correcciones extremas
+            # Un ángulo de ~5° (0.087 rad) es razonable para triángulos casi coplanares
+            phi0 = 0.087  # ~5 grados
+        else:
+            phi0 = math.acos(d)
+        
+        # DEBUGGING: Verificar valores problemáticos
+        if phi0 < 0.01:
+            print(f"   ⚠️ ADVERTENCIA: phi0 calculado como {phi0:.6f} (muy pequeño)")
+            print(f"      d={d:.6f}, n1={n1}, n2={n2}")
+            print(f"      p1={p1.location}, p2={p2.location}, p3={p3.location}, p4={p4.location}")
+        
+        return phi0
+    
+    def get_idx(x, y, z):
+        """Obtener índice de vértice en la grilla"""
+        return z * subdivisiones * subdivisiones + y * subdivisiones + x
+    
+    # Aplicar bending SOLO en las 6 caras externas del cubo
+    # Para cada cara, encontrar pares de triángulos adyacentes que compartan una arista
+    
+    # Cara inferior (z = 0)
+    z = 0
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            # Cada cuadrícula tiene 2 triángulos: (i0, i1, i2) y (i0, i2, i3)
+            i0 = get_idx(x, y, z)
+            i1 = get_idx(x + 1, y, z)
+            i2 = get_idx(x + 1, y + 1, z)
+            i3 = get_idx(x, y + 1, z)
+            
+            if all(i < N for i in [i0, i1, i2, i3]):
+                p0 = system.particles[i0]
+                p1 = system.particles[i1]
+                p2 = system.particles[i2]
+                p3 = system.particles[i3]
+                
+                # Bending entre los dos triángulos de esta cuadrícula
+                # Triángulo A: (i0, i1, i2), Triángulo B: (i0, i2, i3)
+                # Arista compartida: (i0, i2)
+                # Vértices libres: i1 (triángulo A) e i3 (triángulo B)
+                phi0 = calcular_phi0(p1, p0, p2, p3)
+                
+                # DEBUGGING: Log valores iniciales de bending constraints
+                if len(bending_constraints) < 5:  # Solo primeros 5 para no saturar
+                    print(f"   📐 Creando BendingConstraint #{len(bending_constraints)}:")
+                    print(f"      Cara: Inferior (z=0), Cuadrícula: ({x}, {y})")
+                    print(f"      Partículas: [{i0}, {i1}, {i2}, {i3}]")
+                    print(f"      Triángulo A: ({i0}, {i1}, {i2}), Triángulo B: ({i0}, {i2}, {i3})")
+                    print(f"      Arista compartida: ({i0}, {i2})")
+                    print(f"      Ángulo inicial (phi0): {phi0:.6f} rad ({math.degrees(phi0):.2f}°)")
+                    print(f"      Rigidez: {bending_stiffness}")
+                    print(f"      Posiciones iniciales:")
+                    print(f"         p{i0}: {p0.location}")
+                    print(f"         p{i1}: {p1.location}")
+                    print(f"         p{i2}: {p2.location}")
+                    print(f"         p{i3}: {p3.location}")
+                
+                bc = BendingConstraint(p1, p0, p2, p3, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+                
+                # Bending con triángulo adyacente a la derecha (si existe)
+                if x < subdivisiones - 2:
+                    i4 = get_idx(x + 2, y, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        # Triángulo actual: (i0, i1, i2), Triángulo derecho: (i1, i4, i2)
+                        # Arista compartida: (i1, i2)
+                        phi0 = calcular_phi0(p0, p1, p2, p4)
+                        bc = BendingConstraint(p0, p1, p2, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+                
+                # Bending con triángulo adyacente arriba (si existe)
+                if y < subdivisiones - 2:
+                    i4 = get_idx(x, y + 2, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        # Triángulo actual: (i0, i2, i3), Triángulo arriba: (i2, i4, i3)
+                        # Arista compartida: (i2, i3)
+                        phi0 = calcular_phi0(p0, p2, p3, p4)
+                        bc = BendingConstraint(p0, p2, p3, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+    
+    # Cara superior (z = subdivisiones - 1)
+    z = subdivisiones - 1
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            i0 = get_idx(x, y, z)
+            i1 = get_idx(x + 1, y, z)
+            i2 = get_idx(x + 1, y + 1, z)
+            i3 = get_idx(x, y + 1, z)
+            
+            if all(i < N for i in [i0, i1, i2, i3]):
+                p0 = system.particles[i0]
+                p1 = system.particles[i1]
+                p2 = system.particles[i2]
+                p3 = system.particles[i3]
+                
+                # Bending entre los dos triángulos de esta cuadrícula
+                # Triángulo A: (i0, i2, i1), Triángulo B: (i0, i3, i2)
+                # Arista compartida: (i0, i2)
+                phi0 = calcular_phi0(p1, p0, p2, p3)
+                bc = BendingConstraint(p1, p0, p2, p3, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+                
+                if x < subdivisiones - 2:
+                    i4 = get_idx(x + 2, y, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p1, p2, p4)
+                        bc = BendingConstraint(p0, p1, p2, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+                
+                if y < subdivisiones - 2:
+                    i4 = get_idx(x, y + 2, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p2, p3, p4)
+                        bc = BendingConstraint(p0, p2, p3, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+    
+    # Cara frontal (y = 0)
+    y = 0
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            i0 = get_idx(x, y, z)
+            i1 = get_idx(x + 1, y, z)
+            i2 = get_idx(x + 1, y, z + 1)
+            i3 = get_idx(x, y, z + 1)
+            
+            if all(i < N for i in [i0, i1, i2, i3]):
+                p0 = system.particles[i0]
+                p1 = system.particles[i1]
+                p2 = system.particles[i2]
+                p3 = system.particles[i3]
+                
+                # Bending entre los dos triángulos de esta cuadrícula
+                phi0 = calcular_phi0(p1, p0, p2, p3)
+                bc = BendingConstraint(p1, p0, p2, p3, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+                
+                if x < subdivisiones - 2:
+                    i4 = get_idx(x + 2, y, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p1, p2, p4)
+                        bc = BendingConstraint(p0, p1, p2, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+                
+                if z < subdivisiones - 2:
+                    i4 = get_idx(x, y, z + 2)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p2, p3, p4)
+                        bc = BendingConstraint(p0, p2, p3, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+    
+    # Cara trasera (y = subdivisiones - 1)
+    y = subdivisiones - 1
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            i0 = get_idx(x, y, z)
+            i1 = get_idx(x + 1, y, z)
+            i2 = get_idx(x + 1, y, z + 1)
+            i3 = get_idx(x, y, z + 1)
+            
+            if all(i < N for i in [i0, i1, i2, i3]):
+                p0 = system.particles[i0]
+                p1 = system.particles[i1]
+                p2 = system.particles[i2]
+                p3 = system.particles[i3]
+                
+                phi0 = calcular_phi0(p1, p0, p2, p3)
+                bc = BendingConstraint(p1, p0, p2, p3, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+                
+                if x < subdivisiones - 2:
+                    i4 = get_idx(x + 2, y, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p1, p2, p4)
+                        bc = BendingConstraint(p0, p1, p2, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+                
+                if z < subdivisiones - 2:
+                    i4 = get_idx(x, y, z + 2)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p2, p3, p4)
+                        bc = BendingConstraint(p0, p2, p3, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+    
+    # Cara izquierda (x = 0)
+    x = 0
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            i0 = get_idx(x, y, z)
+            i1 = get_idx(x, y + 1, z)
+            i2 = get_idx(x, y + 1, z + 1)
+            i3 = get_idx(x, y, z + 1)
+            
+            if all(i < N for i in [i0, i1, i2, i3]):
+                p0 = system.particles[i0]
+                p1 = system.particles[i1]
+                p2 = system.particles[i2]
+                p3 = system.particles[i3]
+                
+                phi0 = calcular_phi0(p1, p0, p2, p3)
+                bc = BendingConstraint(p1, p0, p2, p3, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+                
+                if y < subdivisiones - 2:
+                    i4 = get_idx(x, y + 2, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p1, p2, p4)
+                        bc = BendingConstraint(p0, p1, p2, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+                
+                if z < subdivisiones - 2:
+                    i4 = get_idx(x, y, z + 2)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p2, p3, p4)
+                        bc = BendingConstraint(p0, p2, p3, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+    
+    # Cara derecha (x = subdivisiones - 1)
+    x = subdivisiones - 1
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            i0 = get_idx(x, y, z)
+            i1 = get_idx(x, y + 1, z)
+            i2 = get_idx(x, y + 1, z + 1)
+            i3 = get_idx(x, y, z + 1)
+            
+            if all(i < N for i in [i0, i1, i2, i3]):
+                p0 = system.particles[i0]
+                p1 = system.particles[i1]
+                p2 = system.particles[i2]
+                p3 = system.particles[i3]
+                
+                phi0 = calcular_phi0(p1, p0, p2, p3)
+                bc = BendingConstraint(p1, p0, p2, p3, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+                
+                if y < subdivisiones - 2:
+                    i4 = get_idx(x, y + 2, z)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p1, p2, p4)
+                        bc = BendingConstraint(p0, p1, p2, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+                
+                if z < subdivisiones - 2:
+                    i4 = get_idx(x, y, z + 2)
+                    if i4 < N:
+                        p4 = system.particles[i4]
+                        phi0 = calcular_phi0(p0, p2, p3, p4)
+                        bc = BendingConstraint(p0, p2, p3, p4, phi0, bending_stiffness)
+                        bending_constraints.append(bc)
+                        system.add_constraint(bc)
+    
+    print(f"   ✓ {len(bending_constraints)} restricciones de bending creadas (solo en caras externas)")
+    
+    # ===== 6. (Opcional) Crear restricción de volumen global =====
     global_volume_constraint = None
     if stiffness_global is not None and stiffness_global > 0:
         # Calcular volumen global inicial
