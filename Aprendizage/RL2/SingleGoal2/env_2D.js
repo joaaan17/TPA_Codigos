@@ -1,19 +1,33 @@
 // Entorno Frozen Lake (El Lago Congelado)
 // Implementación clásica de RL con agujeros y comportamiento slippery opcional
 class FrozenLake {
-    constructor(width = 8, height = 8, holePercentage = 0.2, slippery = false) {
+    constructor(width = 8, height = 8, holePercentage = 0.2, slippery = false, useShapedRewards = true) {
         this.width = width;
         this.height = height;
         this.state = [0, 0]; // Estado inicial del agente (esquina superior izquierda)
         this.goal = [height - 1, width - 1]; // Objetivo en la esquina inferior derecha
         this.holePercentage = holePercentage;
         this.slippery = slippery; // Comportamiento no determinista
+        this.useShapedRewards = useShapedRewards; // Recompensas con forma para facilitar aprendizaje
         this.grid = Array(height).fill(0).map(() => Array(width).fill(0)); // 0 = hielo seguro, 1 = agujero, 2 = objetivo
         this.steps = 0;
         this.totalReward = 0;
         this.done = false;
         this.fellInHole = false;
+        this.previousDistance = this._distanceToGoal(this.state);
         this._generateHoles();
+    }
+    
+    // Calcular distancia euclidiana al objetivo
+    _distanceToGoal(state) {
+        const dy = state[0] - this.goal[0];
+        const dx = state[1] - this.goal[1];
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    // Calcular distancia Manhattan al objetivo
+    _manhattanDistance(state) {
+        return Math.abs(state[0] - this.goal[0]) + Math.abs(state[1] - this.goal[1]);
     }
 
     _generateHoles() {
@@ -63,6 +77,7 @@ class FrozenLake {
         this.totalReward = 0;
         this.done = false;
         this.fellInHole = false;
+        this.previousDistance = this._distanceToGoal(this.state);
         return this.state;
     }
 
@@ -124,9 +139,6 @@ class FrozenLake {
         this.steps++;
 
         // Sistema de recompensas Frozen Lake:
-        // +1 si llega al objetivo
-        // -1 si cae en un agujero
-        // 0 en cualquier otro caso
         let reward = 0;
         
         if (this.grid[this.state[0]][this.state[1]] === 1) {
@@ -139,8 +151,22 @@ class FrozenLake {
             reward = 1;
             this.done = true;
         } else {
-            // Hielo seguro, recompensa 0
-            reward = 0;
+            // Hielo seguro
+            if (this.useShapedRewards) {
+                // Recompensas con forma: pequeña recompensa por acercarse al objetivo
+                const currentDistance = this._distanceToGoal(this.state);
+                const maxDistance = this._distanceToGoal([0, 0]); // Distancia máxima (desde inicio)
+                
+                // Recompensa proporcional a cuánto se acercó (normalizada)
+                const distanceImprovement = this.previousDistance - currentDistance;
+                const normalizedReward = (distanceImprovement / maxDistance) * 0.1; // Factor pequeño para no dominar
+                
+                reward = normalizedReward;
+                this.previousDistance = currentDistance;
+            } else {
+                // Recompensa clásica: 0
+                reward = 0;
+            }
         }
 
         this.totalReward += reward;
@@ -164,10 +190,11 @@ class FrozenLake {
         canvas.width = this.width * cellSize;
         canvas.height = this.height * cellSize;
 
-        // Limpiar canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Fondo oscuro (azul oscuro como en la imagen)
+        ctx.fillStyle = '#1a1a3e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Dibujar cuadrícula
+        // Dibujar cuadrícula con líneas blancas delgadas
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         
@@ -185,71 +212,48 @@ class FrozenLake {
             ctx.stroke();
         }
 
-        // Dibujar celdas: hielo, agujeros, objetivo
+        // Dibujar agujeros (círculos negros)
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
-                const cellX = x * cellSize;
-                const cellY = y * cellSize;
-                
                 if (this.grid[y][x] === 1) {
-                    // Agujero (negro)
+                    const centerX = x * cellSize + cellSize / 2;
+                    const centerY = y * cellSize + cellSize / 2;
+                    const radius = cellSize / 3;
+                    
                     ctx.fillStyle = '#000000';
-                    ctx.fillRect(cellX, cellY, cellSize, cellSize);
-                    // Borde del agujero
-                    ctx.strokeStyle = '#ff0000';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(cellX, cellY, cellSize, cellSize);
-                } else if (this.grid[y][x] === 2) {
-                    // Objetivo (verde)
-                    ctx.fillStyle = '#00ff00';
-                    ctx.fillRect(cellX, cellY, cellSize, cellSize);
-                    // Borde del objetivo
-                    ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(cellX, cellY, cellSize, cellSize);
-                } else {
-                    // Hielo seguro (azul claro)
-                    ctx.fillStyle = '#87CEEB';
-                    ctx.fillRect(cellX, cellY, cellSize, cellSize);
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                    ctx.fill();
                 }
             }
         }
 
-        // Dibujar posición inicial (azul más oscuro)
-        ctx.fillStyle = '#2196F3';
-        ctx.fillRect(0, 0, cellSize, cellSize);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, 0, cellSize, cellSize);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${cellSize / 3}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('S', cellSize / 2, cellSize / 2);
-
-        // Dibujar objetivo con letra 'G'
-        const goalX = this.goal[1] * cellSize;
-        const goalY = this.goal[0] * cellSize;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${cellSize / 3}px Arial`;
-        ctx.fillText('G', goalX + cellSize / 2, goalY + cellSize / 2);
-
-        // Dibujar agente
-        ctx.fillStyle = '#FFD700'; // Dorado para el agente
+        // Dibujar objetivo (círculo rojo-naranja)
+        const goalX = this.goal[1] * cellSize + cellSize / 2;
+        const goalY = this.goal[0] * cellSize + cellSize / 2;
+        const goalRadius = cellSize / 3;
+        
+        ctx.fillStyle = '#ff6347'; // Rojo-naranja como en la imagen
         ctx.beginPath();
-        ctx.arc(
-            this.state[1] * cellSize + cellSize / 2,
-            this.state[0] * cellSize + cellSize / 2,
-            cellSize / 3,
-            0,
-            Math.PI * 2
-        );
+        ctx.arc(goalX, goalY, goalRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Añadir borde al agente
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        // Dibujar agente (círculo azul claro)
+        const agentX = this.state[1] * cellSize + cellSize / 2;
+        const agentY = this.state[0] * cellSize + cellSize / 2;
+        const agentRadius = cellSize / 3;
+        
+        ctx.fillStyle = '#87CEEB'; // Azul claro como en la imagen
+        ctx.beginPath();
+        ctx.arc(agentX, agentY, agentRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dibujar texto "SINGLE-GOAL" en la parte inferior (centro)
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${Math.max(12, cellSize / 4)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('SINGLE-GOAL', canvas.width / 2, canvas.height - 5);
     }
 }
 

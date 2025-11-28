@@ -336,6 +336,12 @@ class Agent {
     }
 
     getBestAction(state) {
+        // Verificar que el estado esté dentro de los límites de la Q-table
+        if (state[0] < 0 || state[0] >= this.Q.length || 
+            state[1] < 0 || state[1] >= this.Q[state[0]].length) {
+            console.error(`Estado fuera de rango: [${state[0]}, ${state[1]}], Q-table: ${this.Q.length}x${this.Q[0]?.length || 0}`);
+            return Math.floor(Math.random() * 4); // Fallback: acción aleatoria
+        }
         return this._argmax(this.Q[state[0]][state[1]]);
     }
 

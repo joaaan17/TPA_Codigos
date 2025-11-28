@@ -41,17 +41,36 @@ function createEnvironment() {
     const height = parseInt(document.getElementById('envHeight').value);
     const holePercentage = parseInt(document.getElementById('envHoles').value) / 100;
     const slippery = document.getElementById('slippery').checked;
+    const shapedRewards = document.getElementById('shapedRewards').checked;
 
-    env = new FrozenLake(width, height, holePercentage, slippery);
+    // IMPORTANTE: Resetear el agente cuando se crea un nuevo entorno
+    // Esto asegura que la Q-table tenga las dimensiones correctas
+    agent = null;
+    rewardsData = [];
+    isTraining = false;
+    shouldStop = false;
+
+    env = new FrozenLake(width, height, holePercentage, slippery, shapedRewards);
     env.reset();
     env.render(canvas);
 
     const slipperyText = slippery ? ' (Slippery activado)' : ' (Determinista)';
-    addLog(`Frozen Lake creado: ${width}x${height}, agujeros: ${holePercentage * 100}%${slipperyText}`);
+    const shapedText = shapedRewards ? ' (Shaped Rewards activado)' : ' (Recompensas clásicas)';
+    addLog(`Frozen Lake creado: ${width}x${height}, agujeros: ${holePercentage * 100}%${slipperyText}${shapedText}`);
+    addLog(`⚠️ Agente reseteado. Debes entrenar de nuevo para este entorno.`);
     updateStatusBadge('ready', 'Listo para entrenar');
+    
+    // Deshabilitar botón de prueba hasta que se entrene
+    document.getElementById('testBtn').disabled = true;
     
     document.getElementById('agentPos').textContent = `(${env.state[0]}, ${env.state[1]})`;
     document.getElementById('steps').textContent = '0';
+    
+    // Limpiar gráfico
+    if (rewardChart) {
+        const ctx = rewardChart.ctx;
+        ctx.clearRect(0, 0, rewardChart.width, rewardChart.height);
+    }
 }
 
 // Iniciar entrenamiento
@@ -85,8 +104,11 @@ async function startTraining() {
     const renderTrainingElement = document.getElementById('renderTraining');
     const renderTraining = renderTrainingElement ? renderTrainingElement.checked : false;
 
-    // Crear agente
+    // IMPORTANTE: Siempre crear un nuevo agente para asegurar que la Q-table
+    // tenga las dimensiones correctas del entorno actual
+    // Si el entorno cambió de tamaño, el agente anterior tendría dimensiones incorrectas
     agent = new Agent(env, alpha, gamma, epsilon, renderTraining, 10, canvas);
+    addLog(`Agente creado con Q-table de ${env.height}x${env.width} (${env.height * env.width * 4} valores)`);
     
     addLog(`Agente creado con α=${alpha}, γ=${gamma}, ε=${epsilon}`);
     addLog(`Iniciando entrenamiento con ${algorithm.toUpperCase()}...`);
