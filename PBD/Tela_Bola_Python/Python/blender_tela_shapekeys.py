@@ -1657,12 +1657,13 @@ def simular_cubo_volumen(context):
             importlib.reload(sys.modules[module_name])
             print(f"   🔄 Módulo '{module_name}' recargado")
     
-    from CuboVolumen import crear_cubo_volumen
+    from CuboVolumen import crear_cubo_volumen, calcular_volumen_tetraedro
     from VolumeConstraintTet import VolumeConstraintTet
     from VolumeConstraintGlobal import VolumeConstraintGlobal
     
     # ===== PASO 3: Crear sistema PBD PRIMERO (antes del mesh de Blender) =====
-    # Esto asegura que los V0 se calculen sobre posiciones limpias
+    # CRÍTICO: Los V0 se calculan dentro de crear_cubo_volumen con las posiciones iniciales
+    # Si movemos el cubo después, los V0 serán incorrectos y causarán deformación inmediata
     print(f"   📦 Creando sistema PBD con {subdivisiones}x{subdivisiones}x{subdivisiones} subdivisiones...")
     system, volume_constraints, global_constraint = crear_cubo_volumen(
         lado, densidad, stiffness_volumen, stiffness_global, subdivisiones
@@ -1674,14 +1675,47 @@ def simular_cubo_volumen(context):
     if global_constraint:
         print(f"   ✓ Restricción de volumen global activada")
     
-    # ===== PASO 4: Posicionar cubo a la altura inicial (ANTES de crear el mesh) =====
+    # ===== PASO 4: CRÍTICO - Posicionar cubo a la altura inicial Y RECALCULAR V0 =====
     # En Blender, Z es el eje vertical, así que movemos en Z
+    # IMPORTANTE: Después de mover, debemos recalcular los V0 porque las posiciones cambiaron
     offset_z = start_height - (lado / 2.0)  # Ajustar para que el cubo esté a start_height en Z
     for particle in system.particles:
         particle.location.z += offset_z
-        particle.last_location.z += offset_z
+        particle.last_location = mathutils.Vector(particle.location)  # Copiar, no referenciar
     
-    print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m")
+    # RECALCULAR V0 después de mover el cubo
+    # Esto es CRÍTICO: los V0 deben corresponder a las posiciones finales
+    print(f"   🔄 Recalculando V0 después de mover cubo a altura {start_height}m...")
+    for constraint in volume_constraints:
+        p0, p1, p2, p3 = constraint.particles
+        # Calcular nuevo V0 con las posiciones actuales
+        V0_nuevo = calcular_volumen_tetraedro(
+            p0.location, p1.location, p2.location, p3.location
+        )
+        if V0_nuevo > 1e-6:
+            constraint.V0 = V0_nuevo
+        else:
+            print(f"   ⚠️ Advertencia: V0 negativo o muy pequeño después de mover: {V0_nuevo}")
+    
+    # Recalcular V0 global si existe
+    if global_constraint:
+        from CuboVolumen import generar_triangulos_cubo_subdividido
+        triangulos = generar_triangulos_cubo_subdividido(subdivisiones)
+        V0_global_nuevo = 0.0
+        for tri in triangulos:
+            i0, i1, i2 = tri
+            if i0 >= len(system.particles) or i1 >= len(system.particles) or i2 >= len(system.particles):
+                continue
+            p0 = system.particles[i0]
+            p1 = system.particles[i1]
+            p2 = system.particles[i2]
+            cross_p0_p1 = mathutils.Vector.cross(p0.location, p1.location)
+            V_tri = mathutils.Vector.dot(cross_p0_p1, p2.location) / 6.0
+            V0_global_nuevo += V_tri
+        global_constraint.V0 = V0_global_nuevo
+        print(f"   ✓ V0 global recalculado: {V0_global_nuevo:.6f}")
+    
+    print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0 recalculados)")
     
     # ===== PASO 5: Crear mesh de Blender usando las posiciones de las partículas =====
     # Esto asegura que el mesh coincida exactamente con las partículas del sistema PBD

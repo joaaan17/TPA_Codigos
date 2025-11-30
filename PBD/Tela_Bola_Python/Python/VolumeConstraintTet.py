@@ -62,11 +62,13 @@ class VolumeConstraintTet(Constraint):
         if math.isnan(V) or math.isinf(V):
             return
         
-        # CRÍTICO: Si el volumen es cero o negativo, el tetraedro está completamente aplastado
-        # En este caso, los gradientes son cero y la restricción NO PUEDE funcionar
-        # Debemos aplicar una corrección de emergencia basada en la geometría
-        if abs(V) < 1e-10:
-            # Tetraedro completamente aplastado - aplicar corrección de emergencia
+        # CRÍTICO: Detectar compresión excesiva ANTES de que el volumen llegue a cero
+        # Si el volumen es menos del 20% del original, aplicar corrección de emergencia agresiva
+        compression_ratio_early = abs(V) / abs(self.V0) if abs(self.V0) > 1e-6 else 1.0
+        
+        # Si el volumen es cero o muy pequeño, o si está muy comprimido, aplicar corrección de emergencia
+        if abs(V) < 1e-10 or compression_ratio_early < 0.2:
+            # Tetraedro completamente aplastado o muy comprimido - aplicar corrección de emergencia
             # Empujar las partículas en la dirección de la normal del plano
             # Calcular normal del plano formado por las 3 primeras partículas
             normal = mathutils.Vector.cross(e1, e2)
@@ -78,13 +80,25 @@ class VolumeConstraintTet(Constraint):
                 normal.normalize()
                 # Empujar todas las partículas en la dirección de la normal
                 # La magnitud debe ser proporcional al volumen objetivo
-                push_distance = abs(self.V0) ** (1.0/3.0) * 0.1  # Aproximación de la arista característica
+                # AUMENTAR la fuerza de corrección cuando hay compresión severa
+                edge_length = abs(self.V0) ** (1.0/3.0)  # Aproximación de la arista característica
+                
+                # Si está muy comprimido, usar una corrección más agresiva
+                if compression_ratio_early < 0.1:
+                    push_distance = edge_length * 0.5  # Corrección muy agresiva (50% de la arista)
+                elif compression_ratio_early < 0.2:
+                    push_distance = edge_length * 0.3  # Corrección agresiva (30% de la arista)
+                else:
+                    push_distance = edge_length * 0.1  # Corrección normal (10% de la arista)
+                
+                # Aplicar corrección con k_coef máximo para asegurar que se aplique
+                effective_k_emergency = min(1.0, self.k_coef * 5.0)  # Multiplicar por 5 para emergencias
                 
                 for i, p in enumerate(self.particles):
                     if not p.bloqueada:
                         # Empujar en dirección de la normal (alternando signo para expandir)
                         sign = 1.0 if i % 2 == 0 else -1.0
-                        correction = normal * push_distance * sign * self.k_coef
+                        correction = normal * push_distance * sign * effective_k_emergency
                         p.location += correction
             
             # Salir después de aplicar corrección de emergencia
@@ -144,7 +158,10 @@ class VolumeConstraintTet(Constraint):
         compression_ratio = abs(V) / abs(self.V0) if abs(self.V0) > 1e-6 else 1.0
         if compression_ratio < 0.1:  # Menos del 10% del volumen original
             # Aumentar k_coef temporalmente para corrección de emergencia
-            effective_k_coef = min(1.0, self.k_coef * 3.0)  # Triplicar la fuerza
+            effective_k_coef = min(1.0, self.k_coef * 5.0)  # Multiplicar por 5 para compresión severa
+        elif compression_ratio < 0.3:  # Menos del 30% del volumen original
+            # Aumentar k_coef para compresión moderada
+            effective_k_coef = min(1.0, self.k_coef * 2.0)  # Duplicar la fuerza
         else:
             effective_k_coef = self.k_coef
         

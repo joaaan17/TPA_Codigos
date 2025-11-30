@@ -93,35 +93,7 @@ class PBDSystem:
                 if nan_count > 0:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: {nan_count} partículas con NaN ANTES de restricciones")
             
-            # Importar aquí para evitar imports circulares
-            from BendingConstraint import BendingConstraint
-            from ShearConstraint import ShearConstraint
-            from VolumeConstraintTet import VolumeConstraintTet
-            from VolumeConstraintGlobal import VolumeConstraintGlobal
-            
-            # 2a. CRÍTICO: Aplicar restricciones de volumen PRIMERO para evitar inversiones
-            # Las restricciones de volumen son las más críticas y deben tener prioridad
-            # LOG: Antes de VolumeConstraint
-            if debug_frame is not None and debug_frame <= 3 and it == 0:
-                nan_before_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
-            
-            # Aplicar restricciones de volumen múltiples veces para mayor estabilidad
-            # AUMENTADO para dar máxima prioridad a volumen
-            num_volume_iterations = 5 if it < 2 else 4  # Muchas más iteraciones al inicio
-            for vol_iter in range(num_volume_iterations):
-                # Proyectar restricciones de volumen por tetraedros
-                self.projectConstraintsOfType(VolumeConstraintTet)
-                
-                # Proyectar restricción de volumen global (si existe)
-                self.projectConstraintsOfType(VolumeConstraintGlobal)
-            
-            # LOG: Después de VolumeConstraint inicial
-            if debug_frame is not None and debug_frame <= 3 and it == 0:
-                nan_after_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
-                if nan_after_vol > nan_before_vol:
-                    print(f"   🔴 Frame {debug_frame}, iter {it}: VolumeConstraint inicial generó NaN: {nan_before_vol} -> {nan_after_vol}")
-            
-            # 2b. Resolver restricciones de forma (distancia, shear, bending) DESPUÉS de volumen
+            # 2a. Resolver restricciones internas en orden específico
             # LOG: Antes de DistanceConstraint
             if debug_frame is not None and debug_frame <= 3 and it == 0:
                 nan_before_dist = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
@@ -133,6 +105,12 @@ class PBDSystem:
                 nan_after_dist = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
                 if nan_after_dist > nan_before_dist:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: DistanceConstraint generó NaN: {nan_before_dist} -> {nan_after_dist}")
+            
+            # Importar aquí para evitar imports circulares
+            from BendingConstraint import BendingConstraint
+            from ShearConstraint import ShearConstraint
+            from VolumeConstraintTet import VolumeConstraintTet
+            from VolumeConstraintGlobal import VolumeConstraintGlobal
             
             # LOG: Antes de ShearConstraint
             if debug_frame is not None and debug_frame <= 3 and it == 0:
@@ -150,48 +128,6 @@ class PBDSystem:
             if debug_frame is not None and debug_frame <= 3 and it == 0:
                 nan_before_bend = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
             
-            # DEBUGGING: Calcular volúmenes de tetraedros ANTES de aplicar BendingConstraint
-            if debug_frame is not None and debug_frame <= 10:
-                try:
-                    from VolumeConstraintTet import VolumeConstraintTet
-                    volumes_antes_bending = []
-                    inverted_antes = 0
-                    for constraint in self.constraints:
-                        if isinstance(constraint, VolumeConstraintTet):
-                            p0 = constraint.particles[0]
-                            p1 = constraint.particles[1]
-                            p2 = constraint.particles[2]
-                            p3 = constraint.particles[3]
-                            
-                            e1 = p1.location - p0.location
-                            e2 = p2.location - p0.location
-                            e3 = p3.location - p0.location
-                            cross_e1_e2 = mathutils.Vector.cross(e1, e2)
-                            V = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
-                            
-                            V0 = constraint.V0
-                            ratio = V / V0 if abs(V0) > 1e-6 else 0.0
-                            
-                            if V < 0:
-                                inverted_antes += 1
-                            
-                            # Guardar solo los primeros 5 para no saturar
-                            if len(volumes_antes_bending) < 5:
-                                volumes_antes_bending.append({
-                                    'tet_id': constraint.tet_id,
-                                    'V': V,
-                                    'V0': V0,
-                                    'ratio': ratio
-                                })
-                    
-                    if inverted_antes > 0 or len(volumes_antes_bending) > 0:
-                        print(f"   📊 ANTES de BendingConstraint (Frame {debug_frame}, Iter {it}):")
-                        print(f"      Tetraedros invertidos: {inverted_antes}")
-                        for vol_info in volumes_antes_bending:
-                            print(f"      Tet {vol_info['tet_id']}: V/V0 = {vol_info['ratio']:.6f} (V={vol_info['V']:.6f}, V0={vol_info['V0']:.6f})")
-                except Exception as e:
-                    pass
-            
             self.projectConstraintsOfType(BendingConstraint)
             
             # LOG: Después de BendingConstraint
@@ -199,63 +135,6 @@ class PBDSystem:
                 nan_after_bend = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
                 if nan_after_bend > nan_before_bend:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: BendingConstraint generó NaN: {nan_before_bend} -> {nan_after_bend}")
-            
-            # DEBUGGING: Calcular volúmenes de tetraedros DESPUÉS de aplicar BendingConstraint
-            if debug_frame is not None and debug_frame <= 10:
-                try:
-                    from VolumeConstraintTet import VolumeConstraintTet
-                    volumes_despues_bending = []
-                    inverted_despues = 0
-                    for constraint in self.constraints:
-                        if isinstance(constraint, VolumeConstraintTet):
-                            p0 = constraint.particles[0]
-                            p1 = constraint.particles[1]
-                            p2 = constraint.particles[2]
-                            p3 = constraint.particles[3]
-                            
-                            e1 = p1.location - p0.location
-                            e2 = p2.location - p0.location
-                            e3 = p3.location - p0.location
-                            cross_e1_e2 = mathutils.Vector.cross(e1, e2)
-                            V = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
-                            
-                            V0 = constraint.V0
-                            ratio = V / V0 if abs(V0) > 1e-6 else 0.0
-                            
-                            if V < 0:
-                                inverted_despues += 1
-                            
-                            # Guardar solo los primeros 5 para comparar
-                            if len(volumes_despues_bending) < 5:
-                                volumes_despues_bending.append({
-                                    'tet_id': constraint.tet_id,
-                                    'V': V,
-                                    'V0': V0,
-                                    'ratio': ratio
-                                })
-                    
-                    if inverted_despues > inverted_antes or len(volumes_despues_bending) > 0:
-                        print(f"   📊 DESPUÉS de BendingConstraint (Frame {debug_frame}, Iter {it}):")
-                        print(f"      Tetraedros invertidos: {inverted_despues} (antes: {inverted_antes}, cambio: {inverted_despues - inverted_antes})")
-                        for i, vol_info in enumerate(volumes_despues_bending):
-                            if i < len(volumes_antes_bending):
-                                vol_antes = volumes_antes_bending[i]
-                                cambio_ratio = vol_info['ratio'] - vol_antes['ratio']
-                                print(f"      Tet {vol_info['tet_id']}: V/V0 = {vol_info['ratio']:.6f} (V={vol_info['V']:.6f}, V0={vol_info['V0']:.6f})")
-                                print(f"         Cambio: {cambio_ratio:.6f} (antes: {vol_antes['ratio']:.6f})")
-                                if abs(cambio_ratio) > 0.5 or vol_info['ratio'] < 0:
-                                    print(f"         ⚠️ PROBLEMA: Cambio grande o inversión detectada")
-                            else:
-                                print(f"      Tet {vol_info['tet_id']}: V/V0 = {vol_info['ratio']:.6f} (V={vol_info['V']:.6f}, V0={vol_info['V0']:.6f})")
-                except Exception as e:
-                    pass
-            
-            # 2c. Aplicar restricciones de volumen OTRA VEZ al final para corregir cualquier inversión
-            # causada por las restricciones de forma
-            # AUMENTADO para corregir inversiones persistentes
-            for vol_iter in range(4):  # 4 veces al final (aumentado de 2)
-                self.projectConstraintsOfType(VolumeConstraintTet)
-                self.projectConstraintsOfType(VolumeConstraintGlobal)
             
             # 2b. APLICAR SHAPE MATCHING (Müller 2005) en primeras iteraciones
             if self.shapeMatching and use_shape_matching and it < shapeMatchingIterations:
@@ -265,11 +144,34 @@ class PBDSystem:
             self.projectCollisions(use_plane_col, use_sphere_col, dt)
             
             # 2d. Colisión con suelo (plano Z = altura_suelo) - APLICAR ANTES de restricciones de volumen
+            # NOTA: La colisión se aplica antes, pero las restricciones de volumen corrigen después
             if use_plane_col and floor_height is not None:
                 self.projectFloorCollision(dt, floor_height)
             
-            # NOTA: Las restricciones de volumen ya se aplicaron al inicio (2a) y al final (2c)
-            # No es necesario aplicarlas aquí de nuevo después de colisiones
+            # 2e. Resolver restricciones de volumen DESPUÉS de colisiones (para corregir el aplastamiento)
+            # CRÍTICO: Aplicar múltiples veces para contrarrestar la compresión de la colisión
+            # APLICAR MÚLTIPLES VECES para mayor estabilidad cuando hay compresión
+            # LOG: Antes de VolumeConstraint
+            if debug_frame is not None and debug_frame <= 3 and it == 0:
+                nan_before_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+            
+            # Aplicar restricciones de volumen múltiples veces para mayor estabilidad
+            # Esto es crítico cuando hay compresión fuerte o colisiones
+            # Aumentar iteraciones al inicio de la simulación y cuando hay compresión
+            # CRÍTICO: Aplicar más veces cuando hay colisiones con el suelo
+            num_volume_iterations = 5 if it < 3 else 3  # Más iteraciones al inicio y durante colisiones
+            for vol_iter in range(num_volume_iterations):
+                # Proyectar restricciones de volumen por tetraedros
+                self.projectConstraintsOfType(VolumeConstraintTet)
+                
+                # Proyectar restricción de volumen global (si existe)
+                self.projectConstraintsOfType(VolumeConstraintGlobal)
+            
+            # LOG: Después de VolumeConstraint
+            if debug_frame is not None and debug_frame <= 3 and it == 0:
+                nan_after_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+                if nan_after_vol > nan_before_vol:
+                    print(f"   🔴 Frame {debug_frame}, iter {it}: VolumeConstraint generó NaN: {nan_before_vol} -> {nan_after_vol}")
             
             # LOG: Verificar posiciones después de todas las restricciones (solo primera iteración, frame 1-3)
             if debug_frame is not None and debug_frame <= 3 and it == 0:
@@ -358,15 +260,15 @@ class PBDSystem:
         import math
         
         # Parámetros de colisión suave
-        # MUY REDUCIDOS para permitir que las restricciones de volumen funcionen
-        # La colisión debe ser lo suficientemente suave para que las restricciones puedan corregir
-        stiffness_collision = 0.2  # Rigidez de la colisión (0-1, más alto = más rígido) - MUY REDUCIDO
-        damping_collision = 0.2  # Damping del rebote (0-1, más alto = menos rebote) - REDUCIDO
-        min_penetration = 0.0001  # Penetración mínima para aplicar corrección (evita micro-colisiones)
+        # CRÍTICO: La colisión debe ser suave para permitir que las restricciones de volumen funcionen
+        # Si la colisión es demasiado agresiva, comprime el cubo antes de que las restricciones puedan corregir
+        stiffness_collision = 0.3  # Rigidez de la colisión (0-1, más alto = más rígido) - Ajustado
+        damping_collision = 0.3  # Damping del rebote (0-1, más alto = menos rebote) - Ajustado
+        min_penetration = 0.001  # Penetración mínima para aplicar corrección (evita micro-colisiones)
         
         # Límite máximo de penetración permitida antes de aplicar corrección forzada
-        # Esto previene que las partículas se compriman demasiado
-        max_penetration = 0.1  # Si la penetración es mayor, aplicar corrección más agresiva
+        # Esto previene que las partículas se compriman demasiado y causen inversión de tetraedros
+        max_penetration = 0.05  # REDUCIDO: Si la penetración es mayor, aplicar corrección más agresiva
         
         for particle in self.particles:
             if particle.bloqueada:
