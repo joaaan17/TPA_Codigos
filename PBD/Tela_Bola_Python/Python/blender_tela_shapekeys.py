@@ -406,28 +406,84 @@ class PBD_CLOTH_OT_ForzarActualizacion(bpy.types.Operator):
     
     def execute(self, context):
         try:
-            obj = bpy.data.objects.get("Cloth")
+            scene = context.scene
+            mode = scene.pbd_simulation_mode
+            
+            # Buscar el objeto correcto según el modo de simulación
+            if mode == 'CLOTH':
+                obj = bpy.data.objects.get("Cloth")
+                obj_name = "Cloth"
+            elif mode == 'VOLUME_CUBE':
+                obj = bpy.data.objects.get("VolumeCube")
+                obj_name = "VolumeCube"
+            else:
+                # Intentar ambos objetos
+                obj = bpy.data.objects.get("Cloth") or bpy.data.objects.get("VolumeCube")
+                obj_name = obj.name if obj else "objeto de simulación"
+            
             if not obj:
-                self.report({'ERROR'}, "No se encontró el objeto 'Cloth'")
+                self.report({'ERROR'}, f"No se encontró el objeto de simulación ('Cloth' o 'VolumeCube'). Asegúrate de haber ejecutado la simulación primero.")
                 return {'CANCELLED'}
             
-            # Forzar actualización completa
+            if not obj.data.shape_keys:
+                self.report({'ERROR'}, f"El objeto '{obj.name}' no tiene Shape Keys. Ejecuta la simulación primero.")
+                return {'CANCELLED'}
+            
+            # CRÍTICO: Asegurar que los Shape Keys están en modo ABSOLUTO
+            shape_keys = obj.data.shape_keys
+            shape_keys.use_relative = False
+            print(f"   ✓ Shape Keys configurados en modo ABSOLUTO")
+            
+            # CRÍTICO: Forzar actualización de todos los Shape Keys
+            # Esto es necesario porque Blender a veces no aplica los Shape Keys correctamente
+            for key_block in shape_keys.key_blocks:
+                # Forzar actualización del valor del Shape Key
+                key_block.value = key_block.value  # Esto fuerza una actualización
+            
+            # Seleccionar y activar el objeto
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
+            
+            # Forzar actualización completa del objeto
             bpy.context.view_layer.update()
             
             # Actualizar el objeto
             obj.update_from_editmode()
             obj.data.update()
             
-            # Forzar actualización de dependencias
+            # CRÍTICO: Forzar actualización de dependencias y evaluación
             depsgraph = bpy.context.evaluated_depsgraph_get()
             depsgraph.update()
             
-            # Actualizar la vista
+            # CRÍTICO: Cambiar de frame para forzar re-evaluación
+            frame_actual = scene.frame_current
+            scene.frame_set(frame_actual + 1)
+            bpy.context.view_layer.update()
+            depsgraph.update()
+            scene.frame_set(frame_actual)
+            bpy.context.view_layer.update()
+            depsgraph.update()
+            
+            # CRÍTICO: Forzar actualización del mesh evaluado
+            obj_eval = obj.evaluated_get(depsgraph)
+            if obj_eval and obj_eval.data:
+                obj_eval.data.update()
+            
+            # Actualizar la vista en todas las áreas
             for area in bpy.context.screen.areas:
                 if area.type == 'VIEW_3D':
                     area.tag_redraw()
+                elif area.type == 'PROPERTIES':
+                    area.tag_redraw()
+                elif area.type == 'DOPESHEET_EDITOR':
+                    area.tag_redraw()
             
-            self.report({'INFO'}, "Actualización forzada. Intenta reproducir la animación.")
+            # Verificar que los Shape Keys están visibles
+            if shape_keys.use_relative:
+                print(f"   ⚠️ Advertencia: Shape Keys en modo RELATIVE, cambiando a ABSOLUTE")
+                shape_keys.use_relative = False
+            
+            self.report({'INFO'}, f"Actualización forzada del objeto '{obj.name}'. Shape Keys en modo ABSOLUTO. Intenta reproducir la animación (Space bar).")
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"Error: {str(e)}")
@@ -1650,52 +1706,168 @@ def simular_cubo_volumen(context):
     import sys
     import importlib
     
+    print(f"\n{'='*60}")
+    print(f"🔍 DEBUG: INICIO DE EJECUCIÓN - Estado inicial")
+    print(f"{'='*60}")
+    print(f"   📊 Módulos cargados antes de recargar:")
+    modules_antes = [m for m in sys.modules.keys() if any(x in m for x in ['CuboVolumen', 'VolumeConstraint', 'PBDSystem', 'Particle', 'Distance', 'Bending'])]
+    for m in sorted(modules_antes):
+        print(f"      - {m}")
+    
     # Recargar módulos si ya están cargados (evitar caché)
-    modules_to_reload = ['CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal', 'PBDSystem', 'Particle']
+    # CRÍTICO: Recargar TODOS los módulos relacionados, incluso si no están en sys.modules
+    # Esto asegura que los cambios en el código se reflejen en Blender
+    modules_to_reload = ['CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal', 'DistanceConstraint', 'PBDSystem', 'Particle', 'Constraint']
+    
+    # Primero, eliminar los módulos de sys.modules si existen
     for module_name in modules_to_reload:
         if module_name in sys.modules:
-            importlib.reload(sys.modules[module_name])
-            print(f"   🔄 Módulo '{module_name}' recargado")
+            print(f"   🔄 DEBUG: Eliminando módulo '{module_name}' de sys.modules...")
+            del sys.modules[module_name]
+            print(f"   ✓ Módulo '{module_name}' eliminado")
+        else:
+            print(f"   📝 DEBUG: Módulo '{module_name}' no estaba en sys.modules")
     
+    # Ahora importar los módulos frescos (sin caché)
+    print(f"\n   🔄 Importando módulos frescos (sin caché)...")
     from CuboVolumen import crear_cubo_volumen, calcular_volumen_tetraedro
     from VolumeConstraintTet import VolumeConstraintTet
     from VolumeConstraintGlobal import VolumeConstraintGlobal
+    from DistanceConstraint import DistanceConstraint
+    
+    print(f"   ✓ Módulos importados correctamente (sin caché)")
     
     # ===== PASO 3: Crear sistema PBD PRIMERO (antes del mesh de Blender) =====
     # CRÍTICO: Los V0 se calculan dentro de crear_cubo_volumen con las posiciones iniciales
     # Si movemos el cubo después, los V0 serán incorrectos y causarán deformación inmediata
+    print(f"\n{'='*60}")
+    print(f"🔍 DEBUG: CREANDO SISTEMA PBD")
+    print(f"{'='*60}")
     print(f"   📦 Creando sistema PBD con {subdivisiones}x{subdivisiones}x{subdivisiones} subdivisiones...")
-    system, volume_constraints, global_constraint = crear_cubo_volumen(
+    print(f"   📊 Parámetros: lado={lado}, densidad={densidad}, stiffness_vol={stiffness_volumen}, stiffness_glob={stiffness_global}")
+    
+    # CRÍTICO: Verificar que crear_cubo_volumen retorna 4 valores
+    # Si retorna 3, significa que el módulo no se recargó correctamente
+    resultado = crear_cubo_volumen(
         lado, densidad, stiffness_volumen, stiffness_global, subdivisiones
     )
+    
+    # Verificar número de valores retornados
+    if len(resultado) == 4:
+        system, volume_constraints, global_constraint, distance_constraints = resultado
+        print(f"   ✓ Sistema PBD creado con {len(distance_constraints)} restricciones de distancia")
+    elif len(resultado) == 3:
+        # Fallback: módulo antiguo, crear distance_constraints vacío
+        system, volume_constraints, global_constraint = resultado
+        distance_constraints = []
+        print(f"   ⚠️ ADVERTENCIA: crear_cubo_volumen retornó solo 3 valores (módulo no recargado)")
+        print(f"   ⚠️ Las restricciones de distancia no estarán disponibles")
+    else:
+        raise ValueError(f"crear_cubo_volumen retornó {len(resultado)} valores, se esperaban 3 o 4")
     system.set_n_iters(solver_iterations)
     
-    print(f"   ✓ Sistema PBD creado con {len(system.particles)} partículas")
-    print(f"   ✓ {len(volume_constraints)} restricciones de volumen por tetraedro creadas")
+    print(f"\n   🔍 DEBUG: Sistema PBD creado")
+    print(f"      - Partículas: {len(system.particles)}")
+    print(f"      - Restricciones totales: {len(system.constraints)}")
+    print(f"      - Restricciones de volumen: {len(volume_constraints)}")
+    print(f"      - Restricciones de distancia: {len(distance_constraints)}")
     if global_constraint:
-        print(f"   ✓ Restricción de volumen global activada")
+        print(f"      - Restricción global: SÍ (V0={global_constraint.V0:.6f})")
+    else:
+        print(f"      - Restricción global: NO")
+    
+    # DEBUG: Verificar estado inicial de las primeras 3 partículas
+    print(f"\n   🔍 DEBUG: Estado inicial de primeras 3 partículas:")
+    for i in range(min(3, len(system.particles))):
+        p = system.particles[i]
+        print(f"      Partícula {i}:")
+        print(f"         location: ({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f})")
+        print(f"         last_location: ({p.last_location.x:.6f}, {p.last_location.y:.6f}, {p.last_location.z:.6f})")
+        print(f"         velocity: ({p.velocity.x:.6f}, {p.velocity.y:.6f}, {p.velocity.z:.6f})")
+        print(f"         force: ({p.force.x:.6f}, {p.force.y:.6f}, {p.force.z:.6f})")
+        print(f"         masa: {p.masa:.6f}, w: {p.w:.6f}, bloqueada: {p.bloqueada}")
+    
+    # DEBUG: Verificar V0 de las primeras 3 restricciones de volumen
+    print(f"\n   🔍 DEBUG: V0 de primeras 3 restricciones de volumen:")
+    for i in range(min(3, len(volume_constraints))):
+        c = volume_constraints[i]
+        print(f"      Constraint {i}: V0={c.V0:.6f}, stiffness={c.stiffness:.4f}, k_coef={c.k_coef:.4f}")
+    
+    # DEBUG: Verificar dist0 de las primeras 3 restricciones de distancia
+    if len(distance_constraints) > 0:
+        print(f"\n   🔍 DEBUG: dist0 de primeras 3 restricciones de distancia:")
+        for i in range(min(3, len(distance_constraints))):
+            c = distance_constraints[i]
+            p0, p1 = c.particles
+            dist_actual = (p1.location - p0.location).length
+            print(f"      Constraint {i}: dist0={c.d:.6f}, dist_actual={dist_actual:.6f}, stiffness={c.stiffness:.4f}")
+    else:
+        print(f"\n   ⚠️ DEBUG: No hay restricciones de distancia disponibles")
     
     # ===== PASO 4: CRÍTICO - Posicionar cubo a la altura inicial Y RECALCULAR V0 =====
     # En Blender, Z es el eje vertical, así que movemos en Z
     # IMPORTANTE: Después de mover, debemos recalcular los V0 porque las posiciones cambiaron
+    print(f"\n{'='*60}")
+    print(f"🔍 DEBUG: MOVIENDO CUBO A ALTURA INICIAL")
+    print(f"{'='*60}")
+    print(f"   📊 Antes de mover - primeras 3 partículas:")
+    for i in range(min(3, len(system.particles))):
+        p = system.particles[i]
+        print(f"      Partícula {i}: Z={p.location.z:.6f}")
+    
     offset_z = start_height - (lado / 2.0)  # Ajustar para que el cubo esté a start_height en Z
-    for particle in system.particles:
+    print(f"   📊 offset_z calculado: {offset_z:.6f} (start_height={start_height}, lado/2={lado/2.0})")
+    
+    for i, particle in enumerate(system.particles):
+        z_antes = particle.location.z
         particle.location.z += offset_z
         particle.last_location = mathutils.Vector(particle.location)  # Copiar, no referenciar
+        # DEBUG: Verificar primeras 3
+        if i < 3:
+            print(f"      Partícula {i}: Z {z_antes:.6f} -> {particle.location.z:.6f} (offset={offset_z:.6f})")
+    
+    print(f"   ✓ Cubo movido a altura {start_height}m")
     
     # RECALCULAR V0 después de mover el cubo
     # Esto es CRÍTICO: los V0 deben corresponder a las posiciones finales
+    print(f"\n{'='*60}")
+    print(f"🔍 DEBUG: RECALCULANDO V0 DESPUÉS DE MOVER")
+    print(f"{'='*60}")
     print(f"   🔄 Recalculando V0 después de mover cubo a altura {start_height}m...")
-    for constraint in volume_constraints:
+    
+    # DEBUG: Mostrar V0 ANTES de recalcular (primeras 3)
+    print(f"\n   🔍 DEBUG: V0 ANTES de recalcular (primeras 3):")
+    for i in range(min(3, len(volume_constraints))):
+        c = volume_constraints[i]
+        print(f"      Constraint {i}: V0_antes={c.V0:.6f}")
+    
+    v0_cambios = 0
+    v0_sin_cambios = 0
+    for i, constraint in enumerate(volume_constraints):
         p0, p1, p2, p3 = constraint.particles
         # Calcular nuevo V0 con las posiciones actuales
+        V0_antes = constraint.V0
         V0_nuevo = calcular_volumen_tetraedro(
             p0.location, p1.location, p2.location, p3.location
         )
         if V0_nuevo > 1e-6:
+            if abs(V0_nuevo - V0_antes) > 1e-6:
+                v0_cambios += 1
+                if i < 3:
+                    print(f"      Constraint {i}: V0 {V0_antes:.6f} -> {V0_nuevo:.6f} (cambió)")
+            else:
+                v0_sin_cambios += 1
             constraint.V0 = V0_nuevo
         else:
             print(f"   ⚠️ Advertencia: V0 negativo o muy pequeño después de mover: {V0_nuevo}")
+    
+    print(f"   📊 V0 recalculados: {v0_cambios} cambiaron, {v0_sin_cambios} sin cambios")
+    
+    # DEBUG: Mostrar V0 DESPUÉS de recalcular (primeras 3)
+    print(f"\n   🔍 DEBUG: V0 DESPUÉS de recalcular (primeras 3):")
+    for i in range(min(3, len(volume_constraints))):
+        c = volume_constraints[i]
+        print(f"      Constraint {i}: V0_despues={c.V0:.6f}")
     
     # Recalcular V0 global si existe
     if global_constraint:
@@ -1715,7 +1887,37 @@ def simular_cubo_volumen(context):
         global_constraint.V0 = V0_global_nuevo
         print(f"   ✓ V0 global recalculado: {V0_global_nuevo:.6f}")
     
-    print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0 recalculados)")
+    # RECALCULAR dist0 para restricciones de distancia después de mover el cubo
+    # Esto es CRÍTICO: las distancias de reposo deben corresponder a las posiciones finales
+    if len(distance_constraints) > 0:
+        print(f"\n{'='*60}")
+        print(f"🔍 DEBUG: RECALCULANDO DISTANCIAS DESPUÉS DE MOVER")
+        print(f"{'='*60}")
+        print(f"   🔄 Recalculando dist0 después de mover cubo a altura {start_height}m...")
+        
+        dist_cambios = 0
+        dist_sin_cambios = 0
+        for i, constraint in enumerate(distance_constraints):
+            p0, p1 = constraint.particles
+            # Calcular nueva distancia de reposo con las posiciones actuales
+            dist_antes = constraint.d
+            dist_nueva = (p1.location - p0.location).length
+            if dist_nueva > 1e-6:
+                if abs(dist_nueva - dist_antes) > 1e-6:
+                    dist_cambios += 1
+                    if i < 3:
+                        print(f"      Constraint {i}: dist0 {dist_antes:.6f} -> {dist_nueva:.6f} (cambió)")
+                else:
+                    dist_sin_cambios += 1
+                constraint.d = dist_nueva
+            else:
+                print(f"   ⚠️ Advertencia: Distancia muy pequeña después de mover: {dist_nueva}")
+        
+        print(f"   📊 Distancias recalculadas: {dist_cambios} cambiaron, {dist_sin_cambios} sin cambios")
+        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0 y dist0 recalculados)")
+    else:
+        print(f"   ⚠️ No hay restricciones de distancia para recalcular")
+        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0 recalculados)")
     
     # ===== PASO 5: Crear mesh de Blender usando las posiciones de las partículas =====
     # Esto asegura que el mesh coincida exactamente con las partículas del sistema PBD
@@ -1755,24 +1957,67 @@ def simular_cubo_volumen(context):
     scene.pbd_cloth_is_simulating = True
     
     # Variables para logs de volumen
+    print(f"\n{'='*60}")
+    print(f"🔍 DEBUG: PREPARANDO VARIABLES PARA SIMULACIÓN")
+    print(f"{'='*60}")
+    
     volumenes_iniciales = []
     for constraint in volume_constraints:
-        # Calcular volumen inicial del tetraedro
-        p0, p1, p2, p3 = constraint.particles
-        e1 = p1.location - p0.location
-        e2 = p2.location - p0.location
-        e3 = p3.location - p0.location
-        cross_e1_e2 = mathutils.Vector.cross(e1, e2)
-        V0 = mathutils.Vector.dot(cross_e1_e2, e3) / 6.0
-        volumenes_iniciales.append(V0)
+        # CRÍTICO: Usar V0 de la constraint, NO recalcular desde posiciones
+        # Esto asegura que usamos el valor correcto después de mover el cubo
+        volumenes_iniciales.append(constraint.V0)
+    
+    print(f"   📊 Volúmenes iniciales almacenados: {len(volumenes_iniciales)}")
+    print(f"   🔍 DEBUG: Primeros 3 V0 almacenados:")
+    for i in range(min(3, len(volumenes_iniciales))):
+        print(f"      V0[{i}]={volumenes_iniciales[i]:.6f} (de constraint.V0)")
     
     volumen_global_inicial = None
     if global_constraint:
-        volumen_global_inicial = global_constraint.calcular_volumen()
+        volumen_global_inicial = global_constraint.V0  # Usar V0 de la constraint, no recalcular
+        print(f"   📊 Volumen global inicial: {volumen_global_inicial:.6f} (de constraint.V0)")
+    else:
+        print(f"   📊 Volumen global: NO activo")
     
     try:
+        # DEBUG: Estado antes de empezar la simulación
+        print(f"\n{'='*60}")
+        print(f"🔍 DEBUG: ESTADO ANTES DE SIMULACIÓN (Frame 0)")
+        print(f"{'='*60}")
+        print(f"   📊 Partículas: {len(system.particles)}")
+        print(f"   📊 Restricciones: {len(system.constraints)}")
+        print(f"   📊 Primeras 3 partículas antes de Frame 1:")
+        for i in range(min(3, len(system.particles))):
+            p = system.particles[i]
+            print(f"      Partícula {i}: loc=({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f}), "
+                  f"vel=({p.velocity.x:.6f}, {p.velocity.y:.6f}, {p.velocity.z:.6f}), "
+                  f"force=({p.force.x:.6f}, {p.force.y:.6f}, {p.force.z:.6f})")
+        print(f"   📊 Primeras 3 V0 antes de Frame 1:")
+        for i in range(min(3, len(volume_constraints))):
+            print(f"      V0[{i}]={volume_constraints[i].V0:.6f}")
+        if len(distance_constraints) > 0:
+            print(f"   📊 Primeras 3 dist0 antes de Frame 1:")
+            for i in range(min(3, len(distance_constraints))):
+                c = distance_constraints[i]
+                p0, p1 = c.particles
+                dist_actual = (p1.location - p0.location).length
+                print(f"      dist0[{i}]={c.d:.6f}, dist_actual={dist_actual:.6f}, diff={abs(dist_actual - c.d):.6f}")
+        else:
+            print(f"   ⚠️ No hay restricciones de distancia disponibles")
+        
         # Simular frame por frame
         for frame in range(1, num_frames + 1):
+            # DEBUG: Estado al inicio de cada frame (solo primeros 3 frames)
+            if frame <= 3:
+                print(f"\n{'='*60}")
+                print(f"🔍 DEBUG: INICIO FRAME {frame}")
+                print(f"{'='*60}")
+                print(f"   📊 Primeras 3 partículas al INICIO del frame:")
+                for i in range(min(3, len(system.particles))):
+                    p = system.particles[i]
+                    print(f"      Partícula {i}: loc=({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f}), "
+                          f"vel=({p.velocity.x:.6f}, {p.velocity.y:.6f}, {p.velocity.z:.6f})")
+            
             # Resetear fuerzas
             for particle in system.particles:
                 particle.force = mathutils.Vector((0.0, 0.0, 0.0))
@@ -1783,6 +2028,14 @@ def simular_cubo_volumen(context):
             for particle in system.particles:
                 if not particle.bloqueada:
                     particle.force += gravity * particle.masa
+            
+            # DEBUG: Estado antes de ejecutar solver (solo primeros 3 frames)
+            if frame <= 3:
+                print(f"   📊 Primeras 3 partículas ANTES del solver:")
+                for i in range(min(3, len(system.particles))):
+                    p = system.particles[i]
+                    print(f"      Partícula {i}: loc=({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f}), "
+                          f"force=({p.force.x:.6f}, {p.force.y:.6f}, {p.force.z:.6f})")
             
             # Ejecutar solver PBD
             try:
@@ -1811,6 +2064,26 @@ def simular_cubo_volumen(context):
                                     particle.velocity.x *= friction
                                     particle.velocity.y *= friction
             
+            # DEBUG: Estado después de ejecutar solver (solo primeros 3 frames)
+            if frame <= 3:
+                print(f"   📊 Primeras 3 partículas DESPUÉS del solver:")
+                for i in range(min(3, len(system.particles))):
+                    p = system.particles[i]
+                    print(f"      Partícula {i}: loc=({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f}), "
+                          f"vel=({p.velocity.x:.6f}, {p.velocity.y:.6f}, {p.velocity.z:.6f})")
+                print(f"   📊 Primeras 3 V0 DESPUÉS del solver:")
+                for i in range(min(3, len(volume_constraints))):
+                    print(f"      V0[{i}]={volume_constraints[i].V0:.6f} (debe ser igual al inicial)")
+                if len(distance_constraints) > 0:
+                    print(f"   📊 Primeras 3 dist0 DESPUÉS del solver:")
+                    for i in range(min(3, len(distance_constraints))):
+                        c = distance_constraints[i]
+                        p0, p1 = c.particles
+                        dist_actual = (p1.location - p0.location).length
+                        print(f"      dist0[{i}]={c.d:.6f}, dist_actual={dist_actual:.6f}, diff={abs(dist_actual - c.d):.6f}")
+                else:
+                    print(f"   ⚠️ No hay restricciones de distancia disponibles")
+            
             # Log de volúmenes (cada 10 frames o primeros 3)
             if frame <= 3 or frame % 10 == 0:
                 # Calcular volúmenes actuales
@@ -1836,9 +2109,17 @@ def simular_cubo_volumen(context):
                     print(f"   📊 Frame {frame}, Volumen Global: V/V0 = {ratio_global:.6f}")
             
             # Actualizar mesh base con las posiciones actuales (para visualización en tiempo real)
+            # CRÍTICO: Validar posiciones antes de actualizar el mesh
+            import math
             for i, vertex in enumerate(obj.data.vertices):
                 if i < len(system.particles):
-                    vertex.co = system.particles[i].location
+                    pos = system.particles[i].location
+                    # Validar que la posición es válida antes de actualizar
+                    if (isinstance(pos.x, (int, float)) and isinstance(pos.y, (int, float)) and isinstance(pos.z, (int, float)) and
+                        not (math.isnan(pos.x) or math.isnan(pos.y) or math.isnan(pos.z)) and
+                        not (math.isinf(pos.x) or math.isinf(pos.y) or math.isinf(pos.z))):
+                        vertex.co = mathutils.Vector((pos.x, pos.y, pos.z))
+                    # Si es inválida, mantener la posición anterior del vértice
             obj.data.update()
             
             # Crear Shape Key para este frame
@@ -1846,9 +2127,55 @@ def simular_cubo_volumen(context):
             shape_key = obj.shape_key_add(name=shape_key_name)
             
             # Actualizar posiciones de vértices en el Shape Key
+            # CRÍTICO: Validar que todas las posiciones sean válidas antes de guardar
+            # Si hay NaN o Inf, usar la posición del Basis o del mesh base
+            import math
+            vertices_actualizados = 0
+            vertices_invalidos = 0
+            
+            # Obtener posiciones del Basis como respaldo (solo una vez, fuera del bucle)
+            basis_positions = None
+            if obj.data.shape_keys and len(obj.data.shape_keys.key_blocks) > 0:
+                try:
+                    basis = obj.data.shape_keys.key_blocks[0]
+                    if len(basis.data) == len(obj.data.vertices):
+                        basis_positions = [mathutils.Vector(basis.data[i].co) for i in range(len(basis.data))]
+                except:
+                    pass  # Si falla, usar mesh base como respaldo
+            
             for i, vertex in enumerate(obj.data.vertices):
                 if i < len(system.particles):
-                    shape_key.data[i].co = system.particles[i].location
+                    pos = system.particles[i].location
+                    
+                    # CRÍTICO: Validar que la posición es válida (no NaN, no Inf)
+                    try:
+                        is_valid = (
+                            isinstance(pos.x, (int, float)) and 
+                            isinstance(pos.y, (int, float)) and 
+                            isinstance(pos.z, (int, float)) and
+                            not (math.isnan(pos.x) or math.isnan(pos.y) or math.isnan(pos.z)) and
+                            not (math.isinf(pos.x) or math.isinf(pos.y) or math.isinf(pos.z))
+                        )
+                    except:
+                        is_valid = False
+                    
+                    if is_valid:
+                        # Guardar posición válida
+                        shape_key.data[i].co = mathutils.Vector((pos.x, pos.y, pos.z))
+                        vertices_actualizados += 1
+                    else:
+                        # CRÍTICO: Si la posición es inválida, usar respaldo
+                        vertices_invalidos += 1
+                        if basis_positions is not None and i < len(basis_positions):
+                            # Usar posición del Basis
+                            shape_key.data[i].co = mathutils.Vector(basis_positions[i])
+                        else:
+                            # Último recurso: usar posición del mesh base
+                            shape_key.data[i].co = mathutils.Vector(vertex.co)
+            
+            # Log de advertencia solo si hay vértices inválidos (reducir frecuencia de logs)
+            if vertices_invalidos > 0 and (frame <= 3 or frame % 20 == 0):
+                print(f"   ⚠️ Frame {frame}: {vertices_invalidos} vértices con posiciones inválidas (NaN/Inf), se usaron respaldos")
             
             # Log de progreso
             if frame == 1 or frame % 10 == 0:
@@ -1869,6 +2196,24 @@ def simular_cubo_volumen(context):
         raise
     finally:
         scene.pbd_cloth_is_simulating = False
+        
+        # DEBUG: Estado final del sistema
+        print(f"\n{'='*60}")
+        print(f"🔍 DEBUG: ESTADO FINAL DESPUÉS DE SIMULACIÓN")
+        print(f"{'='*60}")
+        if 'system' in locals():
+            print(f"   📊 Partículas: {len(system.particles)}")
+            print(f"   📊 Restricciones: {len(system.constraints)}")
+            print(f"   📊 Primeras 3 partículas al FINAL:")
+            for i in range(min(3, len(system.particles))):
+                p = system.particles[i]
+                print(f"      Partícula {i}: loc=({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f}), "
+                      f"vel=({p.velocity.x:.6f}, {p.velocity.y:.6f}, {p.velocity.z:.6f})")
+            print(f"   📊 Primeras 3 V0 al FINAL:")
+            if 'volume_constraints' in locals():
+                for i in range(min(3, len(volume_constraints))):
+                    print(f"      V0[{i}]={volume_constraints[i].V0:.6f}")
+        
         print(f"\n   ✅ Flag de simulación reseteado")
 
 

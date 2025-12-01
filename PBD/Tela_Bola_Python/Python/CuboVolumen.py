@@ -262,13 +262,24 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
     
     # Inicializar partículas en las posiciones de los vértices
     # CRÍTICO: Asegurar que las velocidades y fuerzas estén en cero
+    # DEBUG: Verificar que cada partícula tiene su propio objeto Vector
+    print(f"   🔍 DEBUG: Inicializando {N} partículas...")
     for i, pos in enumerate(vertices_pos):
+        # CRÍTICO: Crear nuevos objetos Vector para cada partícula
         system.particles[i].location = mathutils.Vector(pos)
-        system.particles[i].last_location = mathutils.Vector(pos)
+        system.particles[i].last_location = mathutils.Vector(pos)  # Nuevo Vector, no referencia
         # CRÍTICO: Resetear velocidades y fuerzas para evitar estado residual
         system.particles[i].velocity = mathutils.Vector((0.0, 0.0, 0.0))
         system.particles[i].force = mathutils.Vector((0.0, 0.0, 0.0))
         system.particles[i].acceleration = mathutils.Vector((0.0, 0.0, 0.0))
+        
+        # DEBUG: Verificar primeras 3 partículas
+        if i < 3:
+            p = system.particles[i]
+            print(f"      Partícula {i}: loc={p.location}, last_loc={p.last_location}, "
+                  f"id(loc)={id(p.location)}, id(last_loc)={id(p.last_location)}")
+    
+    print(f"   ✓ {N} partículas inicializadas")
     
     # ===== 2. Generar tetraedros interiores =====
     tetraedros_indices = generar_tetraedros_cubo_subdividido(subdivisiones)
@@ -357,6 +368,12 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
             constraint = VolumeConstraintTet(p0, p1, p2, p3, V0, stiffness_volumen)
             volume_constraints.append(constraint)
             system.add_constraint(constraint)
+            
+            # DEBUG: Verificar primeras 3 restricciones
+            if len(volume_constraints) <= 3:
+                print(f"      DEBUG CuboVolumen: Constraint {len(volume_constraints)-1} creada - "
+                      f"V0={V0:.6f}, stiffness={stiffness_volumen:.4f}, "
+                      f"id(V0)={id(constraint.V0) if hasattr(constraint, 'V0') else 'N/A'}")
     
     # ===== 5. (Opcional) Crear restricción de volumen global =====
     global_volume_constraint = None
@@ -386,5 +403,5 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
         )
         system.add_constraint(global_volume_constraint)
     
-    return system, volume_constraints, global_volume_constraint
+    return system, volume_constraints, global_volume_constraint, distance_constraints
 

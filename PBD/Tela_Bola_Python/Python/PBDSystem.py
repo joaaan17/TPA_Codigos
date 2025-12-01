@@ -23,11 +23,17 @@ class PBDSystem:
         self.shapeMatching = None  # Shape Matching (opcional, para soft-bodies)
         
         # Crear partículas iniciales
-        p = mathutils.Vector((0, 0, 0))
-        v = mathutils.Vector((0, 0, 0))
-        
+        # CRÍTICO: Crear nuevos objetos Vector para cada partícula
+        # Si todas comparten el mismo Vector, cambios en una afectan a todas
         for i in range(n):
-            self.particles.append(Particle(p, v, mass))
+            p = mathutils.Vector((0, 0, 0))  # Nuevo Vector para cada partícula
+            v = mathutils.Vector((0, 0, 0))  # Nuevo Vector para cada partícula
+            particle = Particle(p, v, mass)
+            self.particles.append(particle)
+            
+            # DEBUG: Verificar que cada partícula tiene su propio Vector (primeras 3)
+            if i < 3:
+                print(f"      DEBUG PBDSystem: Partícula {i} creada - id(location)={id(particle.location)}, id(velocity)={id(particle.velocity)}")
     
     def set_n_iters(self, n):
         """Configurar número de iteraciones del solver"""
@@ -49,6 +55,15 @@ class PBDSystem:
         self.shapeMatching = shapeMatching
     
     def run(self, dt, apply_damping=True, use_plane_col=True, use_sphere_col=True, use_shape_matching=True, debug_frame=None, floor_height=None):
+        # DEBUG: Estado al inicio de run (solo primeros frames)
+        if debug_frame is not None and debug_frame <= 3:
+            print(f"      DEBUG PBDSystem.run: Frame {debug_frame}, dt={dt:.6f}")
+            print(f"         Partículas: {len(self.particles)}, Restricciones: {len(self.constraints)}")
+            print(f"         Primeras 3 partículas al INICIO de run:")
+            for i in range(min(3, len(self.particles))):
+                p = self.particles[i]
+                print(f"            Partícula {i}: loc=({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f}), "
+                      f"vel=({p.velocity.x:.6f}, {p.velocity.y:.6f}, {p.velocity.z:.6f})")
         """
         Ejecutar un paso de simulación PBD
         
@@ -233,6 +248,13 @@ class PBDSystem:
                 print(f"   🔴 Frame {debug_frame}: {nan_count} partículas con NaN DESPUÉS de run() completo")
             else:
                 print(f"   ✅ Frame {debug_frame}: Todas válidas DESPUÉS de run() completo")
+            
+            # DEBUG: Estado final de las primeras 3 partículas
+            print(f"      DEBUG PBDSystem.run: Primeras 3 partículas al FINAL de run:")
+            for i in range(min(3, len(self.particles))):
+                p = self.particles[i]
+                print(f"            Partícula {i}: loc=({p.location.x:.6f}, {p.location.y:.6f}, {p.location.z:.6f}), "
+                      f"vel=({p.velocity.x:.6f}, {p.velocity.y:.6f}, {p.velocity.z:.6f})")
     
     def projectConstraintsOfType(self, typeClass, enabled=True):
         """Proyectar todas las restricciones de un tipo específico"""
