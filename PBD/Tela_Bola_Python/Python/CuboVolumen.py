@@ -8,6 +8,7 @@ from PBDSystem import PBDSystem
 from VolumeConstraintTet import VolumeConstraintTet
 from VolumeConstraintGlobal import VolumeConstraintGlobal
 from DistanceConstraint import DistanceConstraint
+from BendingConstraint import BendingConstraint
 
 
 def calcular_volumen_tetraedro(p0, p1, p2, p3):
@@ -288,7 +289,20 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
     # INTENCIÓN: Mantener las aristas a su longitud natural, evitando que el cubo se estire o comprima
     # Esto es complementario a las restricciones de volumen y ayuda a mantener la forma cúbica
     distance_constraints = []
-    distance_stiffness = 0.8  # Rigidez alta para mantener la forma del cubo
+    # CRÍTICO: La rigidez de distancia debe ser compatible con la rigidez de volumen
+    # Si el volumen es débil (< 0.3), las distancias también deben ser más suaves
+    # Esto evita que las distancias "bloqueen" la geometría y el volumen no pueda actuar
+    if stiffness_volumen < 0.3:
+        # Volumen suave → Distancias también suaves (pero un poco más rígidas)
+        distance_stiffness = min(0.5, stiffness_volumen + 0.2)
+    elif stiffness_volumen < 0.6:
+        # Volumen medio → Distancias medias
+        distance_stiffness = 0.6
+    else:
+        # Volumen rígido → Distancias rígidas
+        distance_stiffness = 0.8
+    
+    print(f"   📊 Stiffness de distancia ajustado: {distance_stiffness:.2f} (basado en stiffness de volumen: {stiffness_volumen:.2f})")
     
     # Calcular distancia esperada entre vértices adyacentes
     step = lado / (subdivisiones - 1) if subdivisiones > 1 else lado
@@ -377,7 +391,9 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
     
     # ===== 5. (Opcional) Crear restricción de volumen global =====
     global_volume_constraint = None
-    if stiffness_global is not None and stiffness_global > 0:
+    # CRÍTICO: Crear la restricción si stiffness_global no es None
+    # El valor mínimo ya se aplicó en blender_tela_shapekeys.py
+    if stiffness_global is not None and stiffness_global > 1e-6:
         # Calcular volumen global inicial
         triangulos = generar_triangulos_cubo_subdividido(subdivisiones)
         
@@ -403,5 +419,343 @@ def crear_cubo_volumen(lado, densidad, stiffness_volumen, stiffness_global=None,
         )
         system.add_constraint(global_volume_constraint)
     
-    return system, volume_constraints, global_volume_constraint, distance_constraints
+    # ===== 6. Crear restricciones de BENDING para las caras externas =====
+    # INTENCIÓN: Evitar que las caras del cubo se plieguen o colapsen
+    # Se aplican solo en la superficie para no interferir con las restricciones de volumen internas
+    bending_constraints = []
+    bending_stiffness = 0.1  # Rigidez baja para permitir cierta deformación
+    
+    # Función auxiliar para calcular phi0 (ángulo inicial entre dos triángulos adyacentes)
+    def calcular_phi0(p1, p2, p3, p4):
+        """
+        Calcular ángulo diedro inicial entre dos triángulos que comparten una arista
+        p1, p2: vértices de la arista compartida
+        p3: tercer vértice del primer triángulo
+        p4: tercer vértice del segundo triángulo
+        """
+        e1 = p2.location - p1.location
+        e2 = p3.location - p1.location
+        e3 = p4.location - p1.location
+        
+        n1 = mathutils.Vector.cross(e1, e2)
+        n2 = mathutils.Vector.cross(e1, e3)
+        
+        len_n1 = n1.length
+        len_n2 = n2.length
+        
+        if len_n1 < 1e-6 or len_n2 < 1e-6:
+            return 0.087  # ~5 grados por defecto para evitar degeneración
+        
+        n1 = n1.normalized()
+        n2 = n2.normalized()
+        
+        d = n1.dot(n2)
+        d = max(-1.0, min(1.0, d))
+        
+        if abs(d - 1.0) < 1e-6:  # Si los vectores son casi paralelos, ángulo es 0
+            return 0.087  # ~5 grados
+        
+        return math.acos(d)
+    
+    # Crear restricciones de bending para cada cara del cubo
+    # Solo en las caras externas (superficie del cubo)
+    
+    # Cara inferior (z = 0)
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            # Cada cuadrado de la cara se divide en 2 triángulos
+            # Necesitamos crear bending constraints entre triángulos adyacentes
+            
+            # Triángulo 1: (x,y,0), (x+1,y,0), (x,y+1,0)
+            # Triángulo 2: (x+1,y,0), (x+1,y+1,0), (x,y+1,0)
+            # Arista compartida: (x+1,y,0) - (x,y+1,0)
+            
+            p1_idx = get_idx(x + 1, y, 0)      # Vértice 1 de arista compartida
+            p2_idx = get_idx(x, y + 1, 0)      # Vértice 2 de arista compartida
+            p3_idx = get_idx(x, y, 0)          # Tercer vértice triángulo 1
+            p4_idx = get_idx(x + 1, y + 1, 0)  # Tercer vértice triángulo 2
+            
+            if p1_idx < N and p2_idx < N and p3_idx < N and p4_idx < N:
+                p1 = system.particles[p1_idx]
+                p2 = system.particles[p2_idx]
+                p3 = system.particles[p3_idx]
+                p4 = system.particles[p4_idx]
+                
+                phi0 = calcular_phi0(p1, p2, p3, p4)
+                bc = BendingConstraint(p1, p2, p3, p4, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+    
+    # Cara superior (z = subdivisiones - 1)
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            p1_idx = get_idx(x + 1, y, subdivisiones - 1)
+            p2_idx = get_idx(x, y + 1, subdivisiones - 1)
+            p3_idx = get_idx(x, y, subdivisiones - 1)
+            p4_idx = get_idx(x + 1, y + 1, subdivisiones - 1)
+            
+            if p1_idx < N and p2_idx < N and p3_idx < N and p4_idx < N:
+                p1 = system.particles[p1_idx]
+                p2 = system.particles[p2_idx]
+                p3 = system.particles[p3_idx]
+                p4 = system.particles[p4_idx]
+                
+                phi0 = calcular_phi0(p1, p2, p3, p4)
+                bc = BendingConstraint(p1, p2, p3, p4, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+    
+    # Cara frontal (y = 0)
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            p1_idx = get_idx(x + 1, 0, z)
+            p2_idx = get_idx(x, 0, z + 1)
+            p3_idx = get_idx(x, 0, z)
+            p4_idx = get_idx(x + 1, 0, z + 1)
+            
+            if p1_idx < N and p2_idx < N and p3_idx < N and p4_idx < N:
+                p1 = system.particles[p1_idx]
+                p2 = system.particles[p2_idx]
+                p3 = system.particles[p3_idx]
+                p4 = system.particles[p4_idx]
+                
+                phi0 = calcular_phi0(p1, p2, p3, p4)
+                bc = BendingConstraint(p1, p2, p3, p4, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+    
+    # Cara trasera (y = subdivisiones - 1)
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            p1_idx = get_idx(x + 1, subdivisiones - 1, z)
+            p2_idx = get_idx(x, subdivisiones - 1, z + 1)
+            p3_idx = get_idx(x, subdivisiones - 1, z)
+            p4_idx = get_idx(x + 1, subdivisiones - 1, z + 1)
+            
+            if p1_idx < N and p2_idx < N and p3_idx < N and p4_idx < N:
+                p1 = system.particles[p1_idx]
+                p2 = system.particles[p2_idx]
+                p3 = system.particles[p3_idx]
+                p4 = system.particles[p4_idx]
+                
+                phi0 = calcular_phi0(p1, p2, p3, p4)
+                bc = BendingConstraint(p1, p2, p3, p4, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+    
+    # Cara izquierda (x = 0)
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            p1_idx = get_idx(0, y + 1, z)
+            p2_idx = get_idx(0, y, z + 1)
+            p3_idx = get_idx(0, y, z)
+            p4_idx = get_idx(0, y + 1, z + 1)
+            
+            if p1_idx < N and p2_idx < N and p3_idx < N and p4_idx < N:
+                p1 = system.particles[p1_idx]
+                p2 = system.particles[p2_idx]
+                p3 = system.particles[p3_idx]
+                p4 = system.particles[p4_idx]
+                
+                phi0 = calcular_phi0(p1, p2, p3, p4)
+                bc = BendingConstraint(p1, p2, p3, p4, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+    
+    # Cara derecha (x = subdivisiones - 1)
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            p1_idx = get_idx(subdivisiones - 1, y + 1, z)
+            p2_idx = get_idx(subdivisiones - 1, y, z + 1)
+            p3_idx = get_idx(subdivisiones - 1, y, z)
+            p4_idx = get_idx(subdivisiones - 1, y + 1, z + 1)
+            
+            if p1_idx < N and p2_idx < N and p3_idx < N and p4_idx < N:
+                p1 = system.particles[p1_idx]
+                p2 = system.particles[p2_idx]
+                p3 = system.particles[p3_idx]
+                p4 = system.particles[p4_idx]
+                
+                phi0 = calcular_phi0(p1, p2, p3, p4)
+                bc = BendingConstraint(p1, p2, p3, p4, phi0, bending_stiffness)
+                bending_constraints.append(bc)
+                system.add_constraint(bc)
+    
+    print(f"   ✓ {len(bending_constraints)} restricciones de bending creadas para caras externas")
+    
+    # ===== 7. Crear restricciones DIAGONALES para las caras externas =====
+    # INTENCIÓN: Evitar el cizallamiento (shearing) de las caras del cubo
+    # Las restricciones diagonales conectan vértices diagonalmente en cada cara
+    # Esto previene que las caras se deformen en forma de paralelogramo
+    diagonal_constraints = []
+    # CRÍTICO: Las diagonales deben ser compatibles con el volumen
+    # Usar aproximadamente la misma rigidez que las distancias, o un poco menos
+    diagonal_stiffness = distance_stiffness * 0.8  # 80% de la rigidez de distancia
+    print(f"   📊 Stiffness diagonal ajustado: {diagonal_stiffness:.2f}")
+    
+    # Cara inferior (z = 0)
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            # Diagonal 1: (x,y,0) -> (x+1,y+1,0)
+            p0_idx = get_idx(x, y, 0)
+            p1_idx = get_idx(x + 1, y + 1, 0)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+            
+            # Diagonal 2: (x+1,y,0) -> (x,y+1,0)
+            p0_idx = get_idx(x + 1, y, 0)
+            p1_idx = get_idx(x, y + 1, 0)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+    
+    # Cara superior (z = subdivisiones - 1)
+    for y in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            # Diagonal 1: (x,y,z_max) -> (x+1,y+1,z_max)
+            p0_idx = get_idx(x, y, subdivisiones - 1)
+            p1_idx = get_idx(x + 1, y + 1, subdivisiones - 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+            
+            # Diagonal 2: (x+1,y,z_max) -> (x,y+1,z_max)
+            p0_idx = get_idx(x + 1, y, subdivisiones - 1)
+            p1_idx = get_idx(x, y + 1, subdivisiones - 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+    
+    # Cara frontal (y = 0)
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            # Diagonal 1: (x,0,z) -> (x+1,0,z+1)
+            p0_idx = get_idx(x, 0, z)
+            p1_idx = get_idx(x + 1, 0, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+            
+            # Diagonal 2: (x+1,0,z) -> (x,0,z+1)
+            p0_idx = get_idx(x + 1, 0, z)
+            p1_idx = get_idx(x, 0, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+    
+    # Cara trasera (y = subdivisiones - 1)
+    for z in range(subdivisiones - 1):
+        for x in range(subdivisiones - 1):
+            # Diagonal 1: (x,y_max,z) -> (x+1,y_max,z+1)
+            p0_idx = get_idx(x, subdivisiones - 1, z)
+            p1_idx = get_idx(x + 1, subdivisiones - 1, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+            
+            # Diagonal 2: (x+1,y_max,z) -> (x,y_max,z+1)
+            p0_idx = get_idx(x + 1, subdivisiones - 1, z)
+            p1_idx = get_idx(x, subdivisiones - 1, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+    
+    # Cara izquierda (x = 0)
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            # Diagonal 1: (0,y,z) -> (0,y+1,z+1)
+            p0_idx = get_idx(0, y, z)
+            p1_idx = get_idx(0, y + 1, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+            
+            # Diagonal 2: (0,y+1,z) -> (0,y,z+1)
+            p0_idx = get_idx(0, y + 1, z)
+            p1_idx = get_idx(0, y, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+    
+    # Cara derecha (x = subdivisiones - 1)
+    for z in range(subdivisiones - 1):
+        for y in range(subdivisiones - 1):
+            # Diagonal 1: (x_max,y,z) -> (x_max,y+1,z+1)
+            p0_idx = get_idx(subdivisiones - 1, y, z)
+            p1_idx = get_idx(subdivisiones - 1, y + 1, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+            
+            # Diagonal 2: (x_max,y+1,z) -> (x_max,y,z+1)
+            p0_idx = get_idx(subdivisiones - 1, y + 1, z)
+            p1_idx = get_idx(subdivisiones - 1, y, z + 1)
+            if p0_idx < N and p1_idx < N:
+                p0 = system.particles[p0_idx]
+                p1 = system.particles[p1_idx]
+                dist0 = (p1.location - p0.location).length
+                if dist0 > 1e-6:
+                    dc = DistanceConstraint(p0, p1, dist0, diagonal_stiffness)
+                    diagonal_constraints.append(dc)
+                    system.add_constraint(dc)
+    
+    print(f"   ✓ {len(diagonal_constraints)} restricciones diagonales creadas para caras externas")
+    
+    return system, volume_constraints, global_volume_constraint, distance_constraints, bending_constraints, diagonal_constraints
 

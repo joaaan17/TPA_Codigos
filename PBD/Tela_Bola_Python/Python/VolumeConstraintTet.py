@@ -154,14 +154,26 @@ class VolumeConstraintTet(Constraint):
         # ===== 5. Calcular correcciones =====
         # Δp_i = -w_i * (C / denom) * k' * grad_i
         
-        # Si el tetraedro está muy comprimido, aumentar la fuerza de corrección
+        # NUEVO SISTEMA: Corrección adaptativa basada en compresión Y stiffness
         compression_ratio = abs(V) / abs(self.V0) if abs(self.V0) > 1e-6 else 1.0
-        if compression_ratio < 0.1:  # Menos del 10% del volumen original
-            # Aumentar k_coef temporalmente para corrección de emergencia
-            effective_k_coef = min(1.0, self.k_coef * 5.0)  # Multiplicar por 5 para compresión severa
-        elif compression_ratio < 0.3:  # Menos del 30% del volumen original
-            # Aumentar k_coef para compresión moderada
-            effective_k_coef = min(1.0, self.k_coef * 2.0)  # Duplicar la fuerza
+        
+        # CASO 1: Compresión severa (< 30%) → Siempre usar corrección fuerte
+        if compression_ratio < 0.1:
+            effective_k_coef = min(1.0, self.k_coef * 10.0)  # x10 para compresión extrema
+        elif compression_ratio < 0.3:
+            effective_k_coef = min(1.0, self.k_coef * 5.0)   # x5 para compresión severa
+        # CASO 2: Stiffness muy bajo (< 0.2) pero compresión moderada (30-70%)
+        # → Aumentar corrección para evitar acumulación de drift
+        elif self.stiffness < 0.2 and compression_ratio < 0.7:
+            # Con stiffness bajo, aumentar la corrección cuando hay compresión
+            # Factor de boost: más compresión = más boost
+            boost_factor = 1.0 + (0.7 - compression_ratio) * 5.0  # boost entre 1.0 y 3.0
+            effective_k_coef = min(0.8, self.k_coef * boost_factor)
+        # CASO 3: Stiffness muy bajo (< 0.15) → Garantizar corrección mínima
+        elif self.stiffness < 0.15:
+            # Con stiffness ultra-bajo, garantizar un mínimo de 0.15 para evitar colapso total
+            effective_k_coef = max(0.15, self.k_coef)
+        # CASO 4: Normal
         else:
             effective_k_coef = self.k_coef
         

@@ -129,7 +129,26 @@ class VolumeConstraintGlobal(Constraint):
         
         # ===== 5. Calcular correcciones =====
         # Δp_i = -w_i * (C / denom) * k' * grad_i
-        lambda_val = -self.k_coef * self.C / denom
+        
+        # NUEVO: Corrección adaptativa basada en compresión Y stiffness
+        compression_ratio = abs(V) / abs(self.V0) if abs(self.V0) > 1e-6 else 1.0
+        
+        # CASO 1: Compresión severa → Corrección fuerte
+        if compression_ratio < 0.1:
+            effective_k_coef = min(1.0, self.k_coef * 10.0)
+        elif compression_ratio < 0.3:
+            effective_k_coef = min(1.0, self.k_coef * 5.0)
+        # CASO 2: Stiffness muy bajo pero compresión moderada
+        elif self.stiffness < 0.2 and compression_ratio < 0.7:
+            boost_factor = 1.0 + (0.7 - compression_ratio) * 5.0
+            effective_k_coef = min(0.8, self.k_coef * boost_factor)
+        # CASO 3: Stiffness ultra-bajo → Mínimo garantizado
+        elif self.stiffness < 0.15:
+            effective_k_coef = max(0.15, self.k_coef)
+        else:
+            effective_k_coef = self.k_coef
+        
+        lambda_val = -effective_k_coef * self.C / denom
         
         if math.isnan(lambda_val) or math.isinf(lambda_val):
             return

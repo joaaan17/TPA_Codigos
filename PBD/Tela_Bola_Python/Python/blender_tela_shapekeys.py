@@ -5,6 +5,7 @@ Este script crea un panel de control y pre-simula la tela guardando cada frame c
 import bpy  # type: ignore
 import bmesh  # type: ignore
 import mathutils  # type: ignore
+import math
 import sys
 import os
 
@@ -236,10 +237,10 @@ def init_properties():
     
     scene.pbd_cube_subdivisions = bpy.props.IntProperty(
         name="Subdivisiones",
-        description="Número de subdivisiones por eje (3 = 27 vértices, 4 = 64 vértices, etc.)",
+        description="Número de subdivisiones por eje (3 = 27 vértices, 4 = 64 vértices, 5 = 125, 6 = 216, 7 = 343, 8 = 512 vértices)",
         default=3,
         min=2,
-        max=6
+        max=8
     )
 
 
@@ -1655,7 +1656,22 @@ def simular_cubo_volumen(context):
     lado = scene.pbd_cube_side
     densidad = scene.pbd_cube_density
     stiffness_volumen = scene.pbd_cube_volume_stiffness
-    stiffness_global = scene.pbd_cube_global_volume_stiffness if scene.pbd_cube_use_global_volume else None
+    # CRÍTICO: Si el usuario marca "Usar Volumen Global", aplicar un mínimo para evitar colapso completo
+    # Un stiffness muy bajo (cercano a 0) hace que la restricción apenas tenga efecto
+    if scene.pbd_cube_use_global_volume:
+        stiffness_global_raw = scene.pbd_cube_global_volume_stiffness
+        # Aplicar valor mínimo de 0.05 si el stiffness es muy bajo
+        # Esto evita que el cubo se colapse completamente mientras permite que sea más blando
+        stiffness_global_min = 0.05
+        if stiffness_global_raw < stiffness_global_min:
+            print(f"   ⚠️ ADVERTENCIA: Stiffness global ({stiffness_global_raw}) es muy bajo.")
+            print(f"   ⚠️ Aplicando valor mínimo ({stiffness_global_min}) para evitar colapso completo.")
+            print(f"   💡 Para un cubo más blando, usa valores entre 0.1 y 0.3")
+            stiffness_global = stiffness_global_min
+        else:
+            stiffness_global = stiffness_global_raw
+    else:
+        stiffness_global = None
     solver_iterations = scene.pbd_cloth_solver_iterations
     num_frames = scene.pbd_cloth_num_frames
     DT = 1.0 / 60.0
@@ -1669,8 +1685,14 @@ def simular_cubo_volumen(context):
     print(f"   Lado del cubo: {lado}m")
     print(f"   Densidad: {densidad} kg/m³")
     print(f"   Stiffness volumen: {stiffness_volumen}")
-    if stiffness_global:
-        print(f"   Stiffness volumen global: {stiffness_global}")
+    if stiffness_global is not None:
+        stiffness_global_raw = scene.pbd_cube_global_volume_stiffness if scene.pbd_cube_use_global_volume else None
+        if stiffness_global_raw is not None and stiffness_global_raw < 0.05:
+            print(f"   Stiffness volumen global: {stiffness_global} (ajustado desde {stiffness_global_raw} para evitar colapso)")
+        else:
+            print(f"   Stiffness volumen global: {stiffness_global}")
+    else:
+        print(f"   Stiffness volumen global: NO activo")
     print(f"   Frames: {num_frames}")
     print(f"   Iteraciones solver: {solver_iterations}")
     if floor_height is not None:
@@ -1717,7 +1739,7 @@ def simular_cubo_volumen(context):
     # Recargar módulos si ya están cargados (evitar caché)
     # CRÍTICO: Recargar TODOS los módulos relacionados, incluso si no están en sys.modules
     # Esto asegura que los cambios en el código se reflejen en Blender
-    modules_to_reload = ['CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal', 'DistanceConstraint', 'PBDSystem', 'Particle', 'Constraint']
+    modules_to_reload = ['CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal', 'DistanceConstraint', 'BendingConstraint', 'PBDSystem', 'Particle', 'Constraint']
     
     # Primero, eliminar los módulos de sys.modules si existen
     for module_name in modules_to_reload:
@@ -1734,6 +1756,7 @@ def simular_cubo_volumen(context):
     from VolumeConstraintTet import VolumeConstraintTet
     from VolumeConstraintGlobal import VolumeConstraintGlobal
     from DistanceConstraint import DistanceConstraint
+    from BendingConstraint import BendingConstraint
     
     print(f"   ✓ Módulos importados correctamente (sin caché)")
     
@@ -1746,24 +1769,39 @@ def simular_cubo_volumen(context):
     print(f"   📦 Creando sistema PBD con {subdivisiones}x{subdivisiones}x{subdivisiones} subdivisiones...")
     print(f"   📊 Parámetros: lado={lado}, densidad={densidad}, stiffness_vol={stiffness_volumen}, stiffness_glob={stiffness_global}")
     
-    # CRÍTICO: Verificar que crear_cubo_volumen retorna 4 valores
-    # Si retorna 3, significa que el módulo no se recargó correctamente
+    # CRÍTICO: Verificar que crear_cubo_volumen retorna 6 valores
+    # Si retorna menos, significa que el módulo no se recargó correctamente
     resultado = crear_cubo_volumen(
         lado, densidad, stiffness_volumen, stiffness_global, subdivisiones
     )
     
     # Verificar número de valores retornados
-    if len(resultado) == 4:
+    if len(resultado) == 6:
+        system, volume_constraints, global_constraint, distance_constraints, bending_constraints, diagonal_constraints = resultado
+        print(f"   ✓ Sistema PBD creado con {len(distance_constraints)} restricciones de distancia, {len(bending_constraints)} de bending y {len(diagonal_constraints)} diagonales")
+    elif len(resultado) == 5:
+        # Fallback: versión sin diagonales
+        system, volume_constraints, global_constraint, distance_constraints, bending_constraints = resultado
+        diagonal_constraints = []
+        print(f"   ⚠️ ADVERTENCIA: crear_cubo_volumen retornó solo 5 valores (sin diagonales)")
+        print(f"   ✓ Sistema PBD creado con {len(distance_constraints)} restricciones de distancia y {len(bending_constraints)} restricciones de bending")
+    elif len(resultado) == 4:
+        # Fallback: versión sin bending ni diagonales
         system, volume_constraints, global_constraint, distance_constraints = resultado
+        bending_constraints = []
+        diagonal_constraints = []
+        print(f"   ⚠️ ADVERTENCIA: crear_cubo_volumen retornó solo 4 valores (sin bending ni diagonales)")
         print(f"   ✓ Sistema PBD creado con {len(distance_constraints)} restricciones de distancia")
     elif len(resultado) == 3:
-        # Fallback: módulo antiguo, crear distance_constraints vacío
+        # Fallback: módulo antiguo, crear listas vacías
         system, volume_constraints, global_constraint = resultado
         distance_constraints = []
+        bending_constraints = []
+        diagonal_constraints = []
         print(f"   ⚠️ ADVERTENCIA: crear_cubo_volumen retornó solo 3 valores (módulo no recargado)")
-        print(f"   ⚠️ Las restricciones de distancia no estarán disponibles")
+        print(f"   ⚠️ Las restricciones de distancia, bending y diagonales no estarán disponibles")
     else:
-        raise ValueError(f"crear_cubo_volumen retornó {len(resultado)} valores, se esperaban 3 o 4")
+        raise ValueError(f"crear_cubo_volumen retornó {len(resultado)} valores, se esperaban 3, 4, 5 o 6")
     system.set_n_iters(solver_iterations)
     
     print(f"\n   🔍 DEBUG: Sistema PBD creado")
@@ -1771,6 +1809,8 @@ def simular_cubo_volumen(context):
     print(f"      - Restricciones totales: {len(system.constraints)}")
     print(f"      - Restricciones de volumen: {len(volume_constraints)}")
     print(f"      - Restricciones de distancia: {len(distance_constraints)}")
+    print(f"      - Restricciones de bending: {len(bending_constraints)}")
+    print(f"      - Restricciones diagonales: {len(diagonal_constraints)}")
     if global_constraint:
         print(f"      - Restricción global: SÍ (V0={global_constraint.V0:.6f})")
     else:
@@ -1803,6 +1843,14 @@ def simular_cubo_volumen(context):
             print(f"      Constraint {i}: dist0={c.d:.6f}, dist_actual={dist_actual:.6f}, stiffness={c.stiffness:.4f}")
     else:
         print(f"\n   ⚠️ DEBUG: No hay restricciones de distancia disponibles")
+    
+    # DEBUG: Verificar phi0 de las primeras 3 restricciones de bending
+    if len(bending_constraints) > 0:
+        print(f"\n   🔍 DEBUG: phi0 de primeras 3 restricciones de bending:")
+        for i in range(min(3, len(bending_constraints))):
+            c = bending_constraints[i]
+    else:
+        print(f"\n   ⚠️ DEBUG: No hay restricciones de bending disponibles")
     
     # ===== PASO 4: CRÍTICO - Posicionar cubo a la altura inicial Y RECALCULAR V0 =====
     # En Blender, Z es el eje vertical, así que movemos en Z
@@ -1914,10 +1962,94 @@ def simular_cubo_volumen(context):
                 print(f"   ⚠️ Advertencia: Distancia muy pequeña después de mover: {dist_nueva}")
         
         print(f"   📊 Distancias recalculadas: {dist_cambios} cambiaron, {dist_sin_cambios} sin cambios")
-        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0 y dist0 recalculados)")
     else:
         print(f"   ⚠️ No hay restricciones de distancia para recalcular")
-        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0 recalculados)")
+    
+    # RECALCULAR dist0 para restricciones diagonales después de mover el cubo
+    # Esto es CRÍTICO: las distancias de reposo deben corresponder a las posiciones finales
+    if len(diagonal_constraints) > 0:
+        print(f"\n{'='*60}")
+        print(f"🔍 DEBUG: RECALCULANDO DISTANCIAS DIAGONALES DESPUÉS DE MOVER")
+        print(f"{'='*60}")
+        print(f"   🔄 Recalculando dist0 diagonales después de mover cubo a altura {start_height}m...")
+        
+        diag_cambios = 0
+        diag_sin_cambios = 0
+        for i, constraint in enumerate(diagonal_constraints):
+            p0, p1 = constraint.particles
+            # Calcular nueva distancia de reposo con las posiciones actuales
+            dist_antes = constraint.d
+            dist_nueva = (p1.location - p0.location).length
+            if dist_nueva > 1e-6:
+                if abs(dist_nueva - dist_antes) > 1e-6:
+                    diag_cambios += 1
+                    if i < 3:
+                        print(f"      Diagonal Constraint {i}: dist0 {dist_antes:.6f} -> {dist_nueva:.6f} (cambió)")
+                else:
+                    diag_sin_cambios += 1
+                constraint.d = dist_nueva
+            else:
+                print(f"   ⚠️ Advertencia: Distancia diagonal muy pequeña después de mover: {dist_nueva}")
+        
+        print(f"   📊 Distancias diagonales recalculadas: {diag_cambios} cambiaron, {diag_sin_cambios} sin cambios")
+        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0, dist0 y diagonales recalculadas)")
+    else:
+        print(f"   ⚠️ No hay restricciones diagonales para recalcular")
+        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0 y dist0 recalculados)")
+    
+    # RECALCULAR phi0 para restricciones de bending después de mover el cubo
+    # Esto es CRÍTICO: los ángulos de reposo deben corresponder a las posiciones finales
+    if len(bending_constraints) > 0:
+        print(f"\n{'='*60}")
+        print(f"🔍 DEBUG: RECALCULANDO ÁNGULOS DE BENDING DESPUÉS DE MOVER")
+        print(f"{'='*60}")
+        print(f"   🔄 Recalculando phi0 después de mover cubo a altura {start_height}m...")
+        
+        phi_cambios = 0
+        phi_sin_cambios = 0
+        for i, constraint in enumerate(bending_constraints):
+            p1, p2, p3, p4 = constraint.particles
+            # Calcular nuevo phi0 con las posiciones actuales
+            phi0_antes = constraint.phi0
+            
+            e1 = p2.location - p1.location
+            e2 = p3.location - p1.location
+            e3 = p4.location - p1.location
+            
+            n1 = mathutils.Vector.cross(e1, e2)
+            n2 = mathutils.Vector.cross(e1, e3)
+            
+            len_n1 = n1.length
+            len_n2 = n2.length
+            
+            # Evitar normales degeneradas
+            if len_n1 < 1e-6 or len_n2 < 1e-6:
+                constraint.phi0 = 0.087  # ~5 grados por defecto
+            else:
+                n1 = n1.normalized()
+                n2 = n2.normalized()
+                
+                d = n1.dot(n2)
+                d = max(-1.0, min(1.0, d))
+                
+                # Si d está muy cerca de 1.0, usar un valor por defecto
+                if abs(d - 1.0) < 1e-6:
+                    constraint.phi0 = 0.087  # ~5 grados
+                else:
+                    constraint.phi0 = math.acos(d)
+            
+            if abs(constraint.phi0 - phi0_antes) > 1e-6:
+                phi_cambios += 1
+                if i < 3:
+                    print(f"      Constraint {i}: phi0 {phi0_antes:.6f} -> {constraint.phi0:.6f} rad (cambió)")
+            else:
+                phi_sin_cambios += 1
+        
+        print(f"   📊 Ángulos de bending recalculados: {phi_cambios} cambiaron, {phi_sin_cambios} sin cambios")
+        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0, dist0, diagonales y phi0 recalculados)")
+    else:
+        print(f"   ⚠️ No hay restricciones de bending para recalcular")
+        print(f"   ✓ Cubo posicionado a altura inicial: {start_height}m (V0, dist0 y diagonales recalculadas)")
     
     # ===== PASO 5: Crear mesh de Blender usando las posiciones de las partículas =====
     # Esto asegura que el mesh coincida exactamente con las partículas del sistema PBD
@@ -2053,7 +2185,6 @@ def simular_cubo_volumen(context):
                         system.projectFloorCollision(DT, floor_height)
                     else:
                         # Fallback: aplicar colisión manualmente
-                        import math
                         for particle in system.particles:
                             if not particle.bloqueada and particle.location.z < floor_height:
                                 particle.location.z = floor_height
@@ -2110,7 +2241,6 @@ def simular_cubo_volumen(context):
             
             # Actualizar mesh base con las posiciones actuales (para visualización en tiempo real)
             # CRÍTICO: Validar posiciones antes de actualizar el mesh
-            import math
             for i, vertex in enumerate(obj.data.vertices):
                 if i < len(system.particles):
                     pos = system.particles[i].location
@@ -2129,7 +2259,6 @@ def simular_cubo_volumen(context):
             # Actualizar posiciones de vértices en el Shape Key
             # CRÍTICO: Validar que todas las posiciones sean válidas antes de guardar
             # Si hay NaN o Inf, usar la posición del Basis o del mesh base
-            import math
             vertices_actualizados = 0
             vertices_invalidos = 0
             

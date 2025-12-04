@@ -108,24 +108,65 @@ class PBDSystem:
                 if nan_count > 0:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: {nan_count} partículas con NaN ANTES de restricciones")
             
-            # 2a. Resolver restricciones internas en orden específico
-            # LOG: Antes de DistanceConstraint
-            if debug_frame is not None and debug_frame <= 3 and it == 0:
-                nan_before_dist = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+            # Importar aquí para evitar imports circulares y para detectar stiffness
+            from BendingConstraint import BendingConstraint
+            from ShearConstraint import ShearConstraint
+            from VolumeConstraintTet import VolumeConstraintTet
+            from VolumeConstraintGlobal import VolumeConstraintGlobal
             
-            self.projectConstraintsOfType(DistanceConstraint)
+            # NUEVO: Detectar si hay stiffness muy bajo en restricciones de volumen
+            # Si es así, resolver volumen PRIMERO para darle prioridad
+            min_volume_stiffness = 1.0
+            for c in self.constraints:
+                if type(c).__name__ in ['VolumeConstraintTet', 'VolumeConstraintGlobal']:
+                    if hasattr(c, 'stiffness'):
+                        min_volume_stiffness = min(min_volume_stiffness, c.stiffness)
+            
+            # ORDEN DE RESOLUCIÓN ADAPTATIVO
+            # Si stiffness de volumen < 0.25 → Resolver volumen PRIMERO
+            # De lo contrario → Orden normal (distancias primero)
+            if min_volume_stiffness < 0.25:
+                # MODO VOLUMEN PRIMERO (para stiffness bajo)
+                # 2a. Resolver restricciones de volumen PRIMERO (múltiples iteraciones)
+                if debug_frame is not None and debug_frame <= 3 and it == 0:
+                    nan_before_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+                
+                # Calcular iteraciones de volumen
+                if min_volume_stiffness > 0.7:
+                    num_volume_iterations = 5 if it < 3 else 3
+                elif min_volume_stiffness > 0.3:
+                    num_volume_iterations = 8 if it < 3 else 5
+                else:
+                    num_volume_iterations = 12 if it < 3 else 8
+                
+                for vol_iter in range(num_volume_iterations):
+                    self.projectConstraintsOfType(VolumeConstraintTet)
+                    self.projectConstraintsOfType(VolumeConstraintGlobal)
+                
+                if debug_frame is not None and debug_frame <= 3 and it == 0:
+                    nan_after_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+                    if nan_after_vol > nan_before_vol:
+                        print(f"   🔴 Frame {debug_frame}, iter {it}: VolumeConstraint generó NaN: {nan_before_vol} -> {nan_after_vol}")
+                
+                # 2b. Luego distancias (con menos fuerza gracias al ajuste adaptativo)
+                if debug_frame is not None and debug_frame <= 3 and it == 0:
+                    nan_before_dist = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+                
+                self.projectConstraintsOfType(DistanceConstraint)
+            else:
+                # MODO NORMAL (orden original para stiffness normal/alto)
+                # 2a. Resolver restricciones internas en orden específico
+                # LOG: Antes de DistanceConstraint
+                if debug_frame is not None and debug_frame <= 3 and it == 0:
+                    nan_before_dist = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+                
+                self.projectConstraintsOfType(DistanceConstraint)
             
             # LOG: Después de DistanceConstraint
             if debug_frame is not None and debug_frame <= 3 and it == 0:
                 nan_after_dist = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
                 if nan_after_dist > nan_before_dist:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: DistanceConstraint generó NaN: {nan_before_dist} -> {nan_after_dist}")
-            
-            # Importar aquí para evitar imports circulares
-            from BendingConstraint import BendingConstraint
-            from ShearConstraint import ShearConstraint
-            from VolumeConstraintTet import VolumeConstraintTet
-            from VolumeConstraintGlobal import VolumeConstraintGlobal
             
             # LOG: Antes de ShearConstraint
             if debug_frame is not None and debug_frame <= 3 and it == 0:
@@ -164,29 +205,36 @@ class PBDSystem:
                 self.projectFloorCollision(dt, floor_height)
             
             # 2e. Resolver restricciones de volumen DESPUÉS de colisiones (para corregir el aplastamiento)
-            # CRÍTICO: Aplicar múltiples veces para contrarrestar la compresión de la colisión
-            # APLICAR MÚLTIPLES VECES para mayor estabilidad cuando hay compresión
-            # LOG: Antes de VolumeConstraint
-            if debug_frame is not None and debug_frame <= 3 and it == 0:
-                nan_before_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
-            
-            # Aplicar restricciones de volumen múltiples veces para mayor estabilidad
-            # Esto es crítico cuando hay compresión fuerte o colisiones
-            # Aumentar iteraciones al inicio de la simulación y cuando hay compresión
-            # CRÍTICO: Aplicar más veces cuando hay colisiones con el suelo
-            num_volume_iterations = 5 if it < 3 else 3  # Más iteraciones al inicio y durante colisiones
-            for vol_iter in range(num_volume_iterations):
-                # Proyectar restricciones de volumen por tetraedros
-                self.projectConstraintsOfType(VolumeConstraintTet)
+            # SOLO si NO se resolvieron al principio (stiffness >= 0.25)
+            if min_volume_stiffness >= 0.25:
+                # MODO NORMAL: Volumen después de colisiones
+                # LOG: Antes de VolumeConstraint
+                if debug_frame is not None and debug_frame <= 3 and it == 0:
+                    nan_before_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
                 
-                # Proyectar restricción de volumen global (si existe)
-                self.projectConstraintsOfType(VolumeConstraintGlobal)
-            
-            # LOG: Después de VolumeConstraint
-            if debug_frame is not None and debug_frame <= 3 and it == 0:
-                nan_after_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
-                if nan_after_vol > nan_before_vol:
-                    print(f"   🔴 Frame {debug_frame}, iter {it}: VolumeConstraint generó NaN: {nan_before_vol} -> {nan_after_vol}")
+                # Calcular iteraciones basadas en stiffness:
+                # - Stiffness alto (>0.7): 3-5 iteraciones
+                # - Stiffness medio (0.3-0.7): 5-8 iteraciones  
+                # - Stiffness bajo (<0.3): 8-12 iteraciones
+                if min_volume_stiffness > 0.7:
+                    num_volume_iterations = 5 if it < 3 else 3
+                elif min_volume_stiffness > 0.3:
+                    num_volume_iterations = 8 if it < 3 else 5
+                else:
+                    num_volume_iterations = 12 if it < 3 else 8
+                
+                for vol_iter in range(num_volume_iterations):
+                    # Proyectar restricciones de volumen por tetraedros
+                    self.projectConstraintsOfType(VolumeConstraintTet)
+                    
+                    # Proyectar restricción de volumen global (si existe)
+                    self.projectConstraintsOfType(VolumeConstraintGlobal)
+                
+                # LOG: Después de VolumeConstraint
+                if debug_frame is not None and debug_frame <= 3 and it == 0:
+                    nan_after_vol = sum(1 for p in self.particles if (math.isnan(p.location.x) or math.isnan(p.location.y) or math.isnan(p.location.z)))
+                    if nan_after_vol > nan_before_vol:
+                        print(f"   🔴 Frame {debug_frame}, iter {it}: VolumeConstraint generó NaN: {nan_before_vol} -> {nan_after_vol}")
             
             # LOG: Verificar posiciones después de todas las restricciones (solo primera iteración, frame 1-3)
             if debug_frame is not None and debug_frame <= 3 and it == 0:
