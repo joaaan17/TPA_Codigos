@@ -238,10 +238,10 @@ def init_properties():
     
     scene.pbd_cube_subdivisions = bpy.props.IntProperty(
         name="Subdivisiones",
-        description="Número de subdivisiones por eje (3 = 27 vértices, 4 = 64 vértices, 5 = 125, 6 = 216, 7 = 343, 8 = 512 vértices)",
+        description="Número de subdivisiones por eje (3 = 27, 4 = 64, 5 = 125, 6 = 216, 7 = 343, 8 = 512, 9 = 729, 10 = 1000, 15 = 3375 vértices)",
         default=3,
         min=2,
-        max=8
+        max=15
     )
 
 
