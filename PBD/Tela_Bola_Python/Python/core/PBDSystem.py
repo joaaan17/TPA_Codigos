@@ -19,6 +19,7 @@ class PBDSystem:
         self.particles = []
         self.constraints = []
         self.collisionObjects = []  # Array de objetos de colisión (esferas, planos, etc.)
+        self.sphereCollider = None  # Colisionador de esfera (opcional)
         self.niters = 5
         self.shapeMatching = None  # Shape Matching (opcional, para soft-bodies)
         
@@ -49,6 +50,10 @@ class PBDSystem:
     def add_collision_object(self, obj):
         """Añadir un objeto de colisión al sistema"""
         self.collisionObjects.append(obj)
+    
+    def set_sphere_collider(self, sphere_collider):
+        """Configurar el colisionador de esfera"""
+        self.sphereCollider = sphere_collider
     
     def set_shape_matching(self, shapeMatching):
         """Configurar Shape Matching (opcional)"""
@@ -86,6 +91,12 @@ class PBDSystem:
         # 1. Predicción de posiciones (integración explícita)
         for particle in self.particles:
             particle.update(dt)
+        
+        # 1b. Predicción de posición de la esfera (si existe)
+        # CRÍTICO: Actualizar posición de la esfera ANTES del solver, igual que las partículas
+        # La gravedad ya se aplicó antes de llamar a run(), aquí solo actualizamos posición
+        if self.sphereCollider is not None and self.sphereCollider.active:
+            self.sphereCollider.update(dt)
         
         # LOG: Verificar posiciones DESPUÉS de update (solo frame 1-3)
         if debug_frame is not None and debug_frame <= 3:
@@ -203,6 +214,10 @@ class PBDSystem:
             # NOTA: La colisión se aplica antes, pero las restricciones de volumen corrigen después
             if use_plane_col and floor_height is not None:
                 self.projectFloorCollision(dt, floor_height)
+            
+            # 2d2. Colisión con esfera - APLICAR DESPUÉS del suelo
+            if use_sphere_col and self.sphereCollider is not None:
+                self.projectSphereCollision(dt)
             
             # 2e. Resolver restricciones de volumen DESPUÉS de colisiones (para corregir el aplastamiento)
             # SOLO si NO se resolvieron al principio (stiffness >= 0.25)
@@ -369,6 +384,65 @@ class PBDSystem:
                     friction = 0.7  # Fricción ligeramente reducida
                     particle.velocity.x *= friction
                     particle.velocity.y *= friction
+    
+    def projectSphereCollision(self, dt):
+        """
+        Resolver colisiones entre partículas del cubo y la esfera
+        Implementa dos-way coupling: partículas son empujadas fuera y la esfera recibe impulso
+        """
+        if self.sphereCollider is None or not self.sphereCollider.active:
+            return
+        
+        # NOTA: La posición de la esfera ya se actualizó en la fase de predicción (antes del solver)
+        # Aquí solo resolvemos las colisiones, no actualizamos posición
+        
+        # Acumuladores para impulso de reacción
+        total_correction = mathutils.Vector((0, 0, 0))
+        total_mass = 0.0
+        
+        # Resolver colisión para cada partícula
+        for particle in self.particles:
+            if particle.bloqueada:
+                continue
+            
+            # Verificar colisión
+            is_inside, penetration, normal = self.sphereCollider.check_collision(particle.location)
+            
+            if is_inside and normal is not None:
+                # Aplicar corrección PBD: empujar partícula fuera de la esfera
+                stiffness = self.sphereCollider.stiffness
+                correction = normal * penetration * stiffness
+                
+                particle.location += correction
+                
+                # Acumular corrección para impulso de reacción
+                if particle.masa > 0 and particle.masa != float('inf'):
+                    total_correction += correction
+                    total_mass += particle.masa
+                
+                # Reflejar velocidad si apunta hacia adentro
+                if particle.velocity.dot(normal) < 0:
+                    # Descomponer velocidad en componentes normal y tangencial
+                    v_normal = particle.velocity.dot(normal) * normal
+                    v_tangential = particle.velocity - v_normal
+                    
+                    # Reflejar componente normal con restitución
+                    # Aplicar fricción a componente tangencial
+                    particle.velocity = -v_normal * self.sphereCollider.restitution + v_tangential * self.sphereCollider.friction
+        
+        # Aplicar impulso de reacción a la esfera (conservación de momento)
+        if total_correction.length > 1e-6 and total_mass > 1e-6:
+            self.sphereCollider.apply_reaction_impulse(total_correction, total_mass, dt)
+        
+        # Colisión de la esfera con el suelo (opcional, para evitar que caiga infinitamente)
+        if self.sphereCollider.center.z - self.sphereCollider.radius < 0.0:
+            # La esfera está debajo del suelo, corregir
+            penetration = self.sphereCollider.radius - self.sphereCollider.center.z
+            self.sphereCollider.center.z += penetration
+            
+            # Reflejar velocidad vertical
+            if self.sphereCollider.velocity.z < 0:
+                self.sphereCollider.velocity.z = -self.sphereCollider.velocity.z * self.sphereCollider.restitution
     
     def applyGlobalDamping(self, k_damping, debug_frame=None):
         """

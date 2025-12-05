@@ -243,6 +243,53 @@ def init_properties():
         min=2,
         max=15
     )
+    
+    # ===== PROPIEDADES PARA ESFERA DE COLISIÓN =====
+    scene.pbd_sphere_enabled = bpy.props.BoolProperty(
+        name="Habilitar Esfera",
+        description="Crear una esfera que cae sobre el cubo para colisiones",
+        default=False
+    )
+    
+    scene.pbd_sphere_height = bpy.props.FloatProperty(
+        name="Distancia Encima del Cubo",
+        description="Distancia adicional encima del cubo desde donde cae la esfera (en metros). 0 = justo encima, mayor = más alto",
+        default=1.0,
+        min=0.0,
+        max=20.0
+    )
+    
+    scene.pbd_sphere_offset_x = bpy.props.FloatProperty(
+        name="Desplazamiento X Esfera",
+        description="Desplazamiento horizontal de la esfera (0 = centro del cubo, positivo = derecha)",
+        default=0.0,
+        min=-5.0,
+        max=5.0
+    )
+    
+    scene.pbd_sphere_offset_y = bpy.props.FloatProperty(
+        name="Desplazamiento Y Esfera",
+        description="Desplazamiento Y de la esfera (0 = centro del cubo)",
+        default=0.0,
+        min=-5.0,
+        max=5.0
+    )
+    
+    scene.pbd_sphere_radius = bpy.props.FloatProperty(
+        name="Radio Esfera",
+        description="Radio de la esfera en metros",
+        default=0.5,
+        min=0.1,
+        max=2.0
+    )
+    
+    scene.pbd_sphere_mass = bpy.props.FloatProperty(
+        name="Masa Esfera",
+        description="Masa de la esfera (afecta el impulso de colisión)",
+        default=1.0,
+        min=0.1,
+        max=10.0
+    )
 
 
 # ============================================
@@ -314,6 +361,17 @@ class PBD_CLOTH_PT_Panel(bpy.types.Panel):
             if scene.pbd_floor_enabled:
                 box.prop(scene, "pbd_floor_height")
                 box.prop(scene, "pbd_cube_start_height")
+            
+            # Esfera de Colisión
+            box = layout.box()
+            box.label(text="Esfera de Colisión:", icon='MESH_UVSPHERE')
+            box.prop(scene, "pbd_sphere_enabled")
+            if scene.pbd_sphere_enabled:
+                box.prop(scene, "pbd_sphere_height")
+                box.prop(scene, "pbd_sphere_offset_x")
+                box.prop(scene, "pbd_sphere_offset_y")
+                box.prop(scene, "pbd_sphere_radius")
+                box.prop(scene, "pbd_sphere_mass")
         
         # ===== PARÁMETROS COMUNES =====
         # Solver
@@ -659,6 +717,50 @@ def crear_suelo_blender(altura, tamaño=20.0):
     mat = bpy.data.materials.new(name="FloorMaterial")
     mat.use_nodes = True
     mat.node_tree.nodes["Principled BSDF"].inputs[0].default_value = (0.5, 0.5, 0.5, 1.0)
+    obj.data.materials.append(mat)
+    
+    return obj
+
+
+def crear_esfera_blender(center, radius, name="CollisionSphere"):
+    """
+    Crear una esfera visual en Blender para visualizar la colisión
+    center: posición inicial (mathutils.Vector o tupla)
+    radius: radio de la esfera
+    name: nombre del objeto
+    """
+    # Eliminar esfera anterior si existe
+    obj_anterior = bpy.data.objects.get(name)
+    if obj_anterior:
+        bpy.data.objects.remove(obj_anterior)
+    
+    # Crear mesh de esfera
+    mesh = bpy.data.meshes.new(name=f"{name}Mesh")
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    
+    # Crear bmesh
+    bm = bmesh.new()
+    
+    # Crear esfera UV (similar a icosphere pero más suave)
+    bmesh.ops.create_uvsphere(
+        bm,
+        u_segments=16,
+        v_segments=8,
+        radius=radius
+    )
+    
+    # Actualizar mesh
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    # Posicionar la esfera
+    obj.location = center
+    
+    # Aplicar material naranja/rojo para visualización
+    mat = bpy.data.materials.new(name=f"{name}Material")
+    mat.use_nodes = True
+    mat.node_tree.nodes["Principled BSDF"].inputs[0].default_value = (1.0, 0.3, 0.1, 1.0)  # Naranja
     obj.data.materials.append(mat)
     
     return obj
@@ -1740,9 +1842,27 @@ def simular_cubo_volumen(context):
     # Recargar módulos si ya están cargados (evitar caché)
     # CRÍTICO: Recargar TODOS los módulos relacionados, incluso si no están en sys.modules
     # Esto asegura que los cambios en el código se reflejen en Blender
-    modules_to_reload = ['CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal', 'DistanceConstraint', 'BendingConstraint', 'PBDSystem', 'Particle', 'Constraint']
+    # Usar rutas completas con subcarpetas
+    modules_to_reload = [
+        'geometry.CuboVolumen',
+        'constraints.VolumeConstraintTet',
+        'constraints.VolumeConstraintGlobal',
+        'constraints.DistanceConstraint',
+        'constraints.BendingConstraint',
+        'constraints.SphereCollision',
+        'core.PBDSystem',
+        'core.Particle',
+        'core.Constraint'
+    ]
     
-    # Primero, eliminar los módulos de sys.modules si existen
+    # También eliminar nombres simples por compatibilidad
+    modules_to_reload_simple = [
+        'CuboVolumen', 'VolumeConstraintTet', 'VolumeConstraintGlobal',
+        'DistanceConstraint', 'BendingConstraint', 'SphereCollision',
+        'PBDSystem', 'Particle', 'Constraint'
+    ]
+    
+    # Primero, eliminar los módulos de sys.modules si existen (con rutas completas)
     for module_name in modules_to_reload:
         if module_name in sys.modules:
             print(f"   🔄 DEBUG: Eliminando módulo '{module_name}' de sys.modules...")
@@ -1751,6 +1871,23 @@ def simular_cubo_volumen(context):
         else:
             print(f"   📝 DEBUG: Módulo '{module_name}' no estaba en sys.modules")
     
+    # También eliminar nombres simples por si acaso
+    for module_name in modules_to_reload_simple:
+        if module_name in sys.modules:
+            print(f"   🔄 DEBUG: Eliminando módulo simple '{module_name}' de sys.modules...")
+            del sys.modules[module_name]
+            print(f"   ✓ Módulo simple '{module_name}' eliminado")
+    
+    # CRÍTICO: Eliminar también todos los módulos relacionados que podrían estar en caché
+    modules_related = [m for m in sys.modules.keys() if any(x in m for x in ['core.', 'constraints.', 'geometry.', 'PBDSystem', 'Particle', 'Constraint', 'SphereCollision'])]
+    for module_name in modules_related:
+        if module_name in sys.modules:
+            try:
+                del sys.modules[module_name]
+                print(f"   🔄 DEBUG: Eliminando módulo relacionado '{module_name}' de sys.modules...")
+            except:
+                pass  # Algunos módulos no se pueden eliminar, no es crítico
+    
     # Ahora importar los módulos frescos (sin caché)
     print(f"\n   🔄 Importando módulos frescos (sin caché)...")
     from geometry.CuboVolumen import crear_cubo_volumen, calcular_volumen_tetraedro
@@ -1758,8 +1895,31 @@ def simular_cubo_volumen(context):
     from constraints.VolumeConstraintGlobal import VolumeConstraintGlobal
     from constraints.DistanceConstraint import DistanceConstraint
     from constraints.BendingConstraint import BendingConstraint
+    from constraints.SphereCollision import SphereCollider
+    
+    # CRÍTICO: Reimportar PBDSystem para asegurar que tenemos la versión nueva con set_sphere_collider
+    import importlib
+    # Buscar todas las variantes posibles del módulo PBDSystem
+    pbd_modules = [m for m in sys.modules.keys() if 'PBDSystem' in m]
+    for module_name in pbd_modules:
+        try:
+            importlib.reload(sys.modules[module_name])
+            print(f"   🔄 Recargado módulo: {module_name}")
+        except:
+            pass
+    
+    # Reimportar PBDSystem
+    from core.PBDSystem import PBDSystem
+    
+    # Verificar que PBDSystem tiene el método set_sphere_collider
+    if not hasattr(PBDSystem, 'set_sphere_collider'):
+        print(f"\n   ❌ ERROR CRÍTICO: PBDSystem no tiene el método 'set_sphere_collider'")
+        print(f"   💡 SOLUCIÓN: Reinicia Blender completamente para cargar los cambios")
+        print(f"   📝 Métodos disponibles en PBDSystem: {[m for m in dir(PBDSystem) if not m.startswith('_') and callable(getattr(PBDSystem, m))]}")
+        raise AttributeError("PBDSystem no tiene set_sphere_collider. Reinicia Blender para cargar los cambios.")
     
     print(f"   ✓ Módulos importados correctamente (sin caché)")
+    print(f"   ✓ PBDSystem tiene set_sphere_collider: {hasattr(PBDSystem, 'set_sphere_collider')}")
     
     # ===== PASO 3: Crear sistema PBD PRIMERO (antes del mesh de Blender) =====
     # CRÍTICO: Los V0 se calculan dentro de crear_cubo_volumen con las posiciones iniciales
@@ -2071,6 +2231,83 @@ def simular_cubo_volumen(context):
         crear_suelo_blender(floor_height)
         print(f"   ✓ Suelo creado a altura {floor_height}m")
     
+    # ===== PASO 6.5: Crear y configurar esfera de colisión si está habilitada =====
+    sphere_collider = None
+    sphere_obj = None
+    if scene.pbd_sphere_enabled:
+        print(f"\n{'='*60}")
+        print(f"🔍 DEBUG: CREANDO ESFERA DE COLISIÓN")
+        print(f"{'='*60}")
+        
+        # Calcular posición inicial de la esfera basada en el centro del cubo
+        # El cubo está centrado en (0, 0, start_height) después de moverlo
+        cube_center_x = 0.0  # Centro del cubo en X
+        cube_center_y = 0.0  # Centro del cubo en Y
+        cube_center_z = start_height  # Centro del cubo en Z (después de mover)
+        
+        # Altura de la esfera: encima del cubo
+        # La esfera debe estar a una altura = centro del cubo + mitad del lado + radio + distancia adicional
+        sphere_z = cube_center_z + (lado / 2.0) + scene.pbd_sphere_radius + scene.pbd_sphere_height
+        
+        # Calcular posición inicial de la esfera (misma X e Y que el cubo + offsets opcionales)
+        sphere_center = mathutils.Vector((
+            cube_center_x + scene.pbd_sphere_offset_x,  # X del cubo + offset
+            cube_center_y + scene.pbd_sphere_offset_y,  # Y del cubo + offset
+            sphere_z  # Z: encima del cubo
+        ))
+        
+        print(f"   📊 Posición del cubo (centro): ({cube_center_x:.2f}, {cube_center_y:.2f}, {cube_center_z:.2f})")
+        print(f"   📊 Posición de la esfera: ({sphere_center.x:.2f}, {sphere_center.y:.2f}, {sphere_center.z:.2f})")
+        
+        # Crear colisionador de esfera
+        sphere_collider = SphereCollider(
+            center=sphere_center,
+            radius=scene.pbd_sphere_radius,
+            velocity=mathutils.Vector((0, 0, 0)),  # Empieza en reposo
+            mass=scene.pbd_sphere_mass
+        )
+        
+        # CRÍTICO: Configurar la gravedad de la esfera con el mismo valor que el cubo
+        sphere_collider.set_gravity(gravity_value)
+        print(f"   ✓ Gravedad de esfera configurada: {gravity_value:.2f} (mismo valor que el cubo)")
+        
+        # Configurar en el sistema PBD
+        # Verificar que el método existe (debug)
+        if not hasattr(system, 'set_sphere_collider'):
+            print(f"   ❌ ERROR: El sistema PBD no tiene el método 'set_sphere_collider'")
+            print(f"   💡 SOLUCIÓN: Reinicia Blender completamente para cargar los cambios")
+            print(f"   📝 Métodos disponibles: {[m for m in dir(system) if not m.startswith('_')]}")
+            raise AttributeError("PBDSystem no tiene set_sphere_collider. Reinicia Blender.")
+        
+        system.set_sphere_collider(sphere_collider)
+        print(f"   ✓ Esfera configurada en sistema PBD")
+        
+        # Crear esfera visual en Blender
+        sphere_obj = crear_esfera_blender(
+            center=sphere_center,
+            radius=scene.pbd_sphere_radius,
+            name="CollisionSphere"
+        )
+        
+        # Limpiar keyframes anteriores de la esfera si existen
+        if sphere_obj.animation_data and sphere_obj.animation_data.action:
+            for fcurve in sphere_obj.animation_data.action.fcurves:
+                if fcurve.data_path == "location":
+                    for keyframe in fcurve.keyframe_points:
+                        sphere_obj.animation_data.action.fcurves.remove(fcurve)
+                        break
+        
+        # Insertar keyframe inicial (frame 0) para la esfera
+        bpy.context.scene.frame_set(0)
+        sphere_obj.location = sphere_center
+        sphere_obj.keyframe_insert(data_path="location", frame=0, index=-1)
+        
+        print(f"   ✓ Esfera creada:")
+        print(f"      - Posición inicial: ({sphere_center.x:.2f}, {sphere_center.y:.2f}, {sphere_center.z:.2f})")
+        print(f"      - Radio: {scene.pbd_sphere_radius:.2f}m")
+        print(f"      - Masa: {scene.pbd_sphere_mass:.2f}kg")
+        print(f"      - Keyframe inicial insertado en frame 0")
+    
     # ===== PASO 7: Añadir debugId a las partículas =====
     for i in range(len(system.particles)):
         system.particles[i].debugId = i
@@ -2162,6 +2399,10 @@ def simular_cubo_volumen(context):
                 if not particle.bloqueada:
                     particle.force += gravity * particle.masa
             
+            # Aplicar gravedad a la esfera también (mismo valor y momento que el cubo)
+            if scene.pbd_sphere_enabled and sphere_collider is not None:
+                sphere_collider.apply_gravity(DT)
+            
             # DEBUG: Estado antes de ejecutar solver (solo primeros 3 frames)
             if frame <= 3:
                 print(f"   📊 Primeras 3 partículas ANTES del solver:")
@@ -2172,12 +2413,14 @@ def simular_cubo_volumen(context):
             
             # Ejecutar solver PBD
             try:
-                system.run(DT, apply_damping=True, use_plane_col=True, use_sphere_col=False, 
+                system.run(DT, apply_damping=True, use_plane_col=True, 
+                          use_sphere_col=scene.pbd_sphere_enabled, 
                           use_shape_matching=False, debug_frame=frame if frame <= 3 else None,
                           floor_height=floor_height)
             except TypeError:
                 # Versión sin floor_height
-                system.run(DT, apply_damping=True, use_plane_col=True, use_sphere_col=False, 
+                system.run(DT, apply_damping=True, use_plane_col=True, 
+                          use_sphere_col=scene.pbd_sphere_enabled,
                           use_shape_matching=False)
                 # Aplicar colisión con suelo manualmente
                 if floor_height is not None:
@@ -2252,6 +2495,17 @@ def simular_cubo_volumen(context):
                         vertex.co = mathutils.Vector((pos.x, pos.y, pos.z))
                     # Si es inválida, mantener la posición anterior del vértice
             obj.data.update()
+            
+            # Actualizar posición de la esfera visual si está habilitada
+            if scene.pbd_sphere_enabled and sphere_obj is not None and sphere_collider is not None:
+                sphere_pos = sphere_collider.get_position()
+                
+                # Establecer frame actual antes de insertar keyframe
+                scene.frame_set(frame)
+                sphere_obj.location = sphere_pos
+                
+                # Insertar keyframe para la posición de la esfera en este frame (todos los ejes)
+                sphere_obj.keyframe_insert(data_path="location", frame=frame)
             
             # Crear Shape Key para este frame
             shape_key_name = f"sim_{frame:04d}"
