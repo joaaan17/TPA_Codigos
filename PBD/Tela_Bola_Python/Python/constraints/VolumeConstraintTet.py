@@ -5,7 +5,7 @@ Implementación exacta según especificaciones
 """
 import mathutils
 import math
-from Constraint import Constraint
+from core.Constraint import Constraint
 
 
 class VolumeConstraintTet(Constraint):

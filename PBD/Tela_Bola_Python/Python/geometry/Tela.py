@@ -4,10 +4,10 @@ Migrado de JavaScript a Python para Blender
 """
 import mathutils
 import math
-from PBDSystem import PBDSystem
-from DistanceConstraint import DistanceConstraint
-from BendingConstraint import BendingConstraint
-from ShearConstraint import ShearConstraint
+from core.PBDSystem import PBDSystem
+from constraints.DistanceConstraint import DistanceConstraint
+from constraints.BendingConstraint import BendingConstraint
+from constraints.ShearConstraint import ShearConstraint
 
 
 def crea_tela(alto, ancho, dens, n_alto, n_ancho, stiffness, display_size):

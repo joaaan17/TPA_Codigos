@@ -5,7 +5,7 @@ Mantiene constante el volumen total de una malla cerrada
 """
 import mathutils
 import math
-from Constraint import Constraint
+from core.Constraint import Constraint
 
 
 class VolumeConstraintGlobal(Constraint):

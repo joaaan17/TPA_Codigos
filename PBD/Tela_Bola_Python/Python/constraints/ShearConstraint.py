@@ -5,7 +5,7 @@ Migrado de JavaScript a Python para Blender
 """
 import mathutils
 import math
-from Constraint import Constraint
+from core.Constraint import Constraint
 
 
 class ShearConstraint(Constraint):

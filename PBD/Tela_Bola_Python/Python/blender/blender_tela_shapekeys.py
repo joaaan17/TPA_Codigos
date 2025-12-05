@@ -9,15 +9,16 @@ import math
 import sys
 import os
 
-# Añadir la ruta del directorio actual al path de Python
+# Añadir la ruta del directorio padre al path de Python
 current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
-# Importar módulos PBD
-from Particle import Particle
-from PBDSystem import PBDSystem
-from Tela import crea_tela, add_bending_constraints, add_shear_constraints
+# Importar módulos PBD desde la nueva estructura
+from core.Particle import Particle
+from core.PBDSystem import PBDSystem
+from geometry.Tela import crea_tela, add_bending_constraints, add_shear_constraints
 
 # ============================================
 # PROPIEDADES DEL PANEL
@@ -804,7 +805,7 @@ def simular_y_guardar_shapekeys(context):
         print(f"   ⚠️ ADVERTENCIA: Ninguna partícula está bloqueada. La tela caerá completamente.")
     
     # Crear restricciones (DESPUÉS de bloquear partículas)
-    from DistanceConstraint import DistanceConstraint
+    from constraints.DistanceConstraint import DistanceConstraint
     
     dx = ancho / (n_ancho - 1.0) if n_ancho > 1 else ancho
     dy = alto / (n_alto - 1.0) if n_alto > 1 else alto
@@ -1752,11 +1753,11 @@ def simular_cubo_volumen(context):
     
     # Ahora importar los módulos frescos (sin caché)
     print(f"\n   🔄 Importando módulos frescos (sin caché)...")
-    from CuboVolumen import crear_cubo_volumen, calcular_volumen_tetraedro
-    from VolumeConstraintTet import VolumeConstraintTet
-    from VolumeConstraintGlobal import VolumeConstraintGlobal
-    from DistanceConstraint import DistanceConstraint
-    from BendingConstraint import BendingConstraint
+    from geometry.CuboVolumen import crear_cubo_volumen, calcular_volumen_tetraedro
+    from constraints.VolumeConstraintTet import VolumeConstraintTet
+    from constraints.VolumeConstraintGlobal import VolumeConstraintGlobal
+    from constraints.DistanceConstraint import DistanceConstraint
+    from constraints.BendingConstraint import BendingConstraint
     
     print(f"   ✓ Módulos importados correctamente (sin caché)")
     
@@ -1919,7 +1920,7 @@ def simular_cubo_volumen(context):
     
     # Recalcular V0 global si existe
     if global_constraint:
-        from CuboVolumen import generar_triangulos_cubo_subdividido
+        from geometry.CuboVolumen import generar_triangulos_cubo_subdividido
         triangulos = generar_triangulos_cubo_subdividido(subdivisiones)
         V0_global_nuevo = 0.0
         for tri in triangulos:

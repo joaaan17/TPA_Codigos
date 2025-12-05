@@ -3,8 +3,8 @@ PBDSystem - Sistema de Position-Based Dynamics
 Migrado de JavaScript a Python para Blender
 """
 import mathutils
-from Particle import Particle
-from DistanceConstraint import DistanceConstraint
+from core.Particle import Particle
+from constraints.DistanceConstraint import DistanceConstraint
 
 
 class PBDSystem:
@@ -109,10 +109,10 @@ class PBDSystem:
                     print(f"   🔴 Frame {debug_frame}, iter {it}: {nan_count} partículas con NaN ANTES de restricciones")
             
             # Importar aquí para evitar imports circulares y para detectar stiffness
-            from BendingConstraint import BendingConstraint
-            from ShearConstraint import ShearConstraint
-            from VolumeConstraintTet import VolumeConstraintTet
-            from VolumeConstraintGlobal import VolumeConstraintGlobal
+            from constraints.BendingConstraint import BendingConstraint
+            from constraints.ShearConstraint import ShearConstraint
+            from constraints.VolumeConstraintTet import VolumeConstraintTet
+            from constraints.VolumeConstraintGlobal import VolumeConstraintGlobal
             
             # NUEVO: Detectar si hay stiffness muy bajo en restricciones de volumen
             # Si es así, resolver volumen PRIMERO para darle prioridad

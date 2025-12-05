@@ -4,11 +4,11 @@ Genera tetraedros interiores y calcula volúmenes iniciales
 """
 import mathutils
 import math
-from PBDSystem import PBDSystem
-from VolumeConstraintTet import VolumeConstraintTet
-from VolumeConstraintGlobal import VolumeConstraintGlobal
-from DistanceConstraint import DistanceConstraint
-from BendingConstraint import BendingConstraint
+from core.PBDSystem import PBDSystem
+from constraints.VolumeConstraintTet import VolumeConstraintTet
+from constraints.VolumeConstraintGlobal import VolumeConstraintGlobal
+from constraints.DistanceConstraint import DistanceConstraint
+from constraints.BendingConstraint import BendingConstraint
 
 
 def calcular_volumen_tetraedro(p0, p1, p2, p3):
