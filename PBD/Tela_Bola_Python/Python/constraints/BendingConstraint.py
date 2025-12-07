@@ -132,6 +132,8 @@ class BendingConstraint(Constraint):
             # Validar corrección antes de aplicar
             if (not math.isnan(delta_p1.x) and not math.isnan(delta_p1.y) and not math.isnan(delta_p1.z) and
                 not math.isinf(delta_p1.x) and not math.isinf(delta_p1.y) and not math.isinf(delta_p1.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p1 = self.clamp_correction(delta_p1)
                 nueva_pos = part1.location + delta_p1
                 # Validar posición resultante
                 if (not math.isnan(nueva_pos.x) and not math.isnan(nueva_pos.y) and not math.isnan(nueva_pos.z)):
@@ -141,6 +143,8 @@ class BendingConstraint(Constraint):
             delta_p2 = q2 * (4.0 * w2 * factor / sum_w)
             if (not math.isnan(delta_p2.x) and not math.isnan(delta_p2.y) and not math.isnan(delta_p2.z) and
                 not math.isinf(delta_p2.x) and not math.isinf(delta_p2.y) and not math.isinf(delta_p2.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p2 = self.clamp_correction(delta_p2)
                 nueva_pos = part2.location + delta_p2
                 if (not math.isnan(nueva_pos.x) and not math.isnan(nueva_pos.y) and not math.isnan(nueva_pos.z)):
                     part2.location = nueva_pos
@@ -149,6 +153,8 @@ class BendingConstraint(Constraint):
             delta_p3 = q3 * (4.0 * w3 * factor / sum_w)
             if (not math.isnan(delta_p3.x) and not math.isnan(delta_p3.y) and not math.isnan(delta_p3.z) and
                 not math.isinf(delta_p3.x) and not math.isinf(delta_p3.y) and not math.isinf(delta_p3.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p3 = self.clamp_correction(delta_p3)
                 nueva_pos = part3.location + delta_p3
                 if (not math.isnan(nueva_pos.x) and not math.isnan(nueva_pos.y) and not math.isnan(nueva_pos.z)):
                     part3.location = nueva_pos
@@ -157,6 +163,8 @@ class BendingConstraint(Constraint):
             delta_p4 = q4 * (4.0 * w4 * factor / sum_w)
             if (not math.isnan(delta_p4.x) and not math.isnan(delta_p4.y) and not math.isnan(delta_p4.z) and
                 not math.isinf(delta_p4.x) and not math.isinf(delta_p4.y) and not math.isinf(delta_p4.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p4 = self.clamp_correction(delta_p4)
                 nueva_pos = part4.location + delta_p4
                 if (not math.isnan(nueva_pos.x) and not math.isnan(nueva_pos.y) and not math.isnan(nueva_pos.z)):
                     part4.location = nueva_pos

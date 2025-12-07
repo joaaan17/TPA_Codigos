@@ -161,6 +161,9 @@ class VolumeConstraintGlobal(Constraint):
                     w = p.w
                     delta_p = grad * (w * lambda_val)
                     if not (math.isnan(delta_p.x) or math.isnan(delta_p.y) or math.isnan(delta_p.z)):
+                        # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                        # Evita correcciones excesivas que causan ondas de choque y colapso
+                        delta_p = self.clamp_correction(delta_p)
                         p.location += delta_p
 
 

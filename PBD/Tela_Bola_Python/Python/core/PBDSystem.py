@@ -1,6 +1,5 @@
 """
 PBDSystem - Sistema de Position-Based Dynamics
-Migrado de JavaScript a Python para Blender
 """
 import mathutils
 from core.Particle import Particle
@@ -217,7 +216,7 @@ class PBDSystem:
             
             # 2d2. Colisión con esfera - APLICAR DESPUÉS del suelo
             if use_sphere_col and self.sphereCollider is not None:
-                self.projectSphereCollision(dt)
+                self.projectSphereCollision(dt, floor_height)
             
             # 2e. Resolver restricciones de volumen DESPUÉS de colisiones (para corregir el aplastamiento)
             # SOLO si NO se resolvieron al principio (stiffness >= 0.25)
@@ -385,10 +384,11 @@ class PBDSystem:
                     particle.velocity.x *= friction
                     particle.velocity.y *= friction
     
-    def projectSphereCollision(self, dt):
+    def projectSphereCollision(self, dt, floor_height=None):
         """
         Resolver colisiones entre partículas del cubo y la esfera
         Implementa dos-way coupling: partículas son empujadas fuera y la esfera recibe impulso
+        floor_height: altura del suelo (None = no hay suelo)
         """
         if self.sphereCollider is None or not self.sphereCollider.active:
             return
@@ -396,9 +396,12 @@ class PBDSystem:
         # NOTA: La posición de la esfera ya se actualizó en la fase de predicción (antes del solver)
         # Aquí solo resolvemos las colisiones, no actualizamos posición
         
-        # Acumuladores para impulso de reacción
-        total_correction = mathutils.Vector((0, 0, 0))
+        # Acumuladores para impulso de reacción (basado en velocidades relativas)
+        total_impulse = mathutils.Vector((0, 0, 0))
         total_mass = 0.0
+        
+        # Velocidad de la esfera (para calcular velocidad relativa)
+        sphere_velocity = self.sphereCollider.velocity
         
         # Resolver colisión para cada partícula
         for particle in self.particles:
@@ -409,40 +412,149 @@ class PBDSystem:
             is_inside, penetration, normal = self.sphereCollider.check_collision(particle.location)
             
             if is_inside and normal is not None:
-                # Aplicar corrección PBD: empujar partícula fuera de la esfera
-                stiffness = self.sphereCollider.stiffness
-                correction = normal * penetration * stiffness
+                # Calcular velocidad relativa ANTES de aplicar correcciones
+                relative_velocity = particle.velocity - sphere_velocity
+                relative_v_normal = relative_velocity.dot(normal)
+                relative_speed = abs(relative_v_normal)
                 
+                # UMBRALES para evitar colisiones continuas cuando hay contacto estático
+                min_relative_speed_for_collision = 0.2  # Velocidad mínima relativa para considerar colisión activa
+                min_relative_speed_for_strong_correction = 0.5  # Velocidad mínima para corrección fuerte
+                
+                # Si la esfera está en reposo, reducir aún más las correcciones
+                if self.sphereCollider.is_resting:
+                    # En reposo: corrección mínima solo para evitar penetración profunda
+                    static_correction_factor = 0.1  # Reducir corrección al 10% cuando está en reposo
+                    stiffness = self.sphereCollider.stiffness * static_correction_factor
+                # Si la velocidad relativa es muy baja, reducir corrección (contacto estático)
+                # Esto evita el ciclo infinito de colisión cuando la esfera está reposando
+                elif relative_speed < min_relative_speed_for_collision:
+                    # Contacto estático: aplicar corrección mínima solo para evitar penetración
+                    static_correction_factor = 0.2  # Reducir corrección al 20% en contacto estático
+                    stiffness = self.sphereCollider.stiffness * static_correction_factor
+                else:
+                    # Colisión activa: corrección normal o aumentada
+                    stiffness = self.sphereCollider.stiffness
+                    
+                    # Aumentar corrección solo si hay movimiento significativo
+                    if relative_speed > min_relative_speed_for_strong_correction:
+                        # Factor basado en masa: esferas más pesadas deforman más el cubo
+                        mass_factor = min(2.0, 1.0 + (self.sphereCollider.mass / 2.0))
+                        stiffness *= mass_factor
+                
+                # Aplicar corrección PBD: empujar partícula fuera de la esfera
+                correction = normal * penetration * stiffness
                 particle.location += correction
                 
-                # Acumular corrección para impulso de reacción
-                if particle.masa > 0 and particle.masa != float('inf'):
-                    total_correction += correction
-                    total_mass += particle.masa
-                
-                # Reflejar velocidad si apunta hacia adentro
-                if particle.velocity.dot(normal) < 0:
-                    # Descomponer velocidad en componentes normal y tangencial
-                    v_normal = particle.velocity.dot(normal) * normal
-                    v_tangential = particle.velocity - v_normal
+                # Solo aplicar impulso si hay movimiento relativo hacia adentro Y significativo
+                if relative_v_normal < -min_relative_speed_for_collision:  # Acercándose con velocidad significativa
+                    # Calcular impulso usando conservación de momento y restitución
+                    # Impulso = masa_relativa * cambio_de_velocidad_normal
+                    # Cambio de velocidad = -(1 + restitución) * velocidad_relativa_normal
+                    restitution = self.sphereCollider.restitution
                     
-                    # Reflejar componente normal con restitución
-                    # Aplicar fricción a componente tangencial
-                    particle.velocity = -v_normal * self.sphereCollider.restitution + v_tangential * self.sphereCollider.friction
+                    # Masa efectiva para colisión (1/m_eff = 1/m1 + 1/m2)
+                    if particle.masa > 1e-6 and self.sphereCollider.mass > 1e-6:
+                        effective_mass = 1.0 / (1.0/particle.masa + 1.0/self.sphereCollider.mass)
+                    else:
+                        effective_mass = min(particle.masa, self.sphereCollider.mass) if particle.masa > 1e-6 else self.sphereCollider.mass
+                    
+                    # Impulso en dirección normal (conservación de momento)
+                    # Reducir impulso si la esfera está en reposo o la velocidad relativa es muy baja
+                    if self.sphereCollider.is_resting:
+                        # En reposo: impulso mínimo (casi cero)
+                        static_impulse_factor = 0.1  # Reducir impulso al 10% cuando está en reposo
+                        mass_boost = 1.0  # Sin boost de masa en reposo
+                    elif relative_speed < min_relative_speed_for_strong_correction:
+                        # Contacto estático: reducir impulso significativamente
+                        static_impulse_factor = 0.3  # Reducir impulso al 30% en contacto estático
+                        mass_boost = 1.0  # Sin boost de masa en contacto estático
+                    else:
+                        # Colisión activa: impulso normal o aumentado
+                        static_impulse_factor = 1.0
+                        mass_boost = 1.0 + (self.sphereCollider.mass / 5.0)  # Boost basado en masa (máx 2x para masa 5kg)
+                    
+                    impulse_magnitude = effective_mass * (1.0 + restitution) * abs(relative_v_normal) * mass_boost * static_impulse_factor
+                    impulse = normal * impulse_magnitude
+                    
+                    # Aplicar impulso a la partícula (cambiar su velocidad)
+                    if particle.masa > 1e-6:
+                        # Factor de deformación: muy reducido en reposo, reducido en contacto estático
+                        if self.sphereCollider.is_resting:
+                            deformation_boost = 0.2  # Muy reducido cuando está en reposo (evitar movimiento)
+                        elif relative_speed < min_relative_speed_for_strong_correction:
+                            deformation_boost = 0.5  # Reducir impulso en contacto estático
+                        else:
+                            deformation_boost = 1.5  # Aumentar impulso 50% para más deformación en colisión activa
+                        particle.velocity += (impulse / particle.masa) * deformation_boost
+                        
+                        # Aplicar fricción a componente tangencial
+                        v_tangential = relative_velocity - relative_v_normal * normal
+                        friction = self.sphereCollider.friction
+                        particle.velocity -= v_tangential * (friction / particle.masa)
+                    
+                    # Acumular impulso opuesto para la esfera (conservación de momento)
+                    total_impulse -= impulse  # Opuesto porque es reacción
+                    total_mass += particle.masa
         
         # Aplicar impulso de reacción a la esfera (conservación de momento)
-        if total_correction.length > 1e-6 and total_mass > 1e-6:
-            self.sphereCollider.apply_reaction_impulse(total_correction, total_mass, dt)
+        if total_impulse.length > 1e-6 and self.sphereCollider.mass > 1e-6:
+            # Si está en reposo, reducir mucho más el impulso
+            if self.sphereCollider.is_resting:
+                # En reposo: aplicar solo 10% del impulso
+                total_impulse *= 0.1
+            
+            # Cambio de velocidad de la esfera = impulso / masa_esfera
+            self.sphereCollider.velocity += total_impulse / self.sphereCollider.mass
+            
+            # Aplicar damping adicional después de colisión para reducir rebote
+            # Más agresivo si está en reposo
+            if self.sphereCollider.is_resting:
+                collision_damping = 0.5  # Reducir 50% cuando está en reposo (muy agresivo)
+            else:
+                collision_damping = 0.7  # Reducir velocidad 30% después de colisión con cubo
+            self.sphereCollider.velocity *= collision_damping
+            
+            # Reducir aún más la componente vertical si está rebotando
+            if self.sphereCollider.velocity.z > 0:  # Rebotando hacia arriba
+                self.sphereCollider.velocity.z *= 0.8  # Reducir rebote vertical adicional
+            
+            # Limitar velocidad máxima para evitar explosiones
+            max_velocity = 50.0
+            if self.sphereCollider.velocity.length > max_velocity:
+                self.sphereCollider.velocity = self.sphereCollider.velocity.normalized() * max_velocity
+            
+            # Si la velocidad es muy baja después de colisión, detenerla casi completamente
+            min_velocity_after_collision = 0.5  # Velocidad mínima después de colisión (aumentada)
+            if self.sphereCollider.velocity.length < min_velocity_after_collision:
+                self.sphereCollider.velocity *= 0.3  # Reducir mucho más si es muy baja (antes 0.5)
         
         # Colisión de la esfera con el suelo (opcional, para evitar que caiga infinitamente)
-        if self.sphereCollider.center.z - self.sphereCollider.radius < 0.0:
+        if floor_height is not None and self.sphereCollider.center.z - self.sphereCollider.radius < floor_height:
             # La esfera está debajo del suelo, corregir
-            penetration = self.sphereCollider.radius - self.sphereCollider.center.z
-            self.sphereCollider.center.z += penetration
+            penetration = self.sphereCollider.radius - (self.sphereCollider.center.z - floor_height)
+            self.sphereCollider.center.z = floor_height + self.sphereCollider.radius
             
-            # Reflejar velocidad vertical
+            # Reflejar velocidad vertical con restitución reducida y damping adicional
             if self.sphereCollider.velocity.z < 0:
-                self.sphereCollider.velocity.z = -self.sphereCollider.velocity.z * self.sphereCollider.restitution
+                # Aplicar restitución (rebote) - muy reducida
+                bounce_velocity = -self.sphereCollider.velocity.z * self.sphereCollider.restitution
+                
+                # Aplicar damping adicional al rebote del suelo (más agresivo)
+                damping_factor = 0.75  # Reducir velocidad 25% después del rebote (antes 0.9)
+                self.sphereCollider.velocity.z = bounce_velocity * damping_factor
+                
+                # También reducir velocidad horizontal por fricción con el suelo
+                friction = self.sphereCollider.friction
+                self.sphereCollider.velocity.x *= friction
+                self.sphereCollider.velocity.y *= friction
+            
+            # Si la velocidad es muy baja, detenerla completamente (evitar micro-rebotes)
+            min_velocity_threshold = 0.4  # Velocidad mínima (m/s) - reducida para detenerse antes
+            if abs(self.sphereCollider.velocity.z) < min_velocity_threshold:
+                self.sphereCollider.velocity.z = 0.0
+            if self.sphereCollider.velocity.length < min_velocity_threshold:
+                self.sphereCollider.velocity = mathutils.Vector((0, 0, 0))
     
     def applyGlobalDamping(self, k_damping, debug_frame=None):
         """

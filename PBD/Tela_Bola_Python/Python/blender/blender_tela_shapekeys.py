@@ -104,7 +104,7 @@ def init_properties():
         description="Número de iteraciones del solver PBD",
         default=5,
         min=1,
-        max=20
+        max=30
     )
     
     # Simulación
@@ -2438,6 +2438,10 @@ def simular_cubo_volumen(context):
                                     friction = 0.8
                                     particle.velocity.x *= friction
                                     particle.velocity.y *= friction
+            
+            # Aplicar damping a la esfera DESPUÉS del solver (no interfiere con la gravedad)
+            if scene.pbd_sphere_enabled and sphere_collider is not None:
+                sphere_collider.apply_damping(DT)
             
             # DEBUG: Estado después de ejecutar solver (solo primeros 3 frames)
             if frame <= 3:

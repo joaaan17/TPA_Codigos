@@ -99,6 +99,8 @@ class VolumeConstraintTet(Constraint):
                         # Empujar en dirección de la normal (alternando signo para expandir)
                         sign = 1.0 if i % 2 == 0 else -1.0
                         correction = normal * push_distance * sign * effective_k_emergency
+                        # CRÍTICO: Clamp de corrección incluso en emergencias
+                        correction = self.clamp_correction(correction)
                         p.location += correction
             
             # Salir después de aplicar corrección de emergencia
@@ -190,21 +192,30 @@ class VolumeConstraintTet(Constraint):
         if not p0.bloqueada:
             delta_p0 = grad0 * (w0 * lambda_val)
             if not (math.isnan(delta_p0.x) or math.isnan(delta_p0.y) or math.isnan(delta_p0.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                # Evita que un tetraedro corrija 0.3m de golpe, causando ondas de choque
+                delta_p0 = self.clamp_correction(delta_p0)
                 p0.location += delta_p0
         
         if not p1.bloqueada:
             delta_p1 = grad1 * (w1 * lambda_val)
             if not (math.isnan(delta_p1.x) or math.isnan(delta_p1.y) or math.isnan(delta_p1.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p1 = self.clamp_correction(delta_p1)
                 p1.location += delta_p1
         
         if not p2.bloqueada:
             delta_p2 = grad2 * (w2 * lambda_val)
             if not (math.isnan(delta_p2.x) or math.isnan(delta_p2.y) or math.isnan(delta_p2.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p2 = self.clamp_correction(delta_p2)
                 p2.location += delta_p2
         
         if not p3.bloqueada:
             delta_p3 = grad3 * (w3 * lambda_val)
             if not (math.isnan(delta_p3.x) or math.isnan(delta_p3.y) or math.isnan(delta_p3.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p3 = self.clamp_correction(delta_p3)
                 p3.location += delta_p3
         
         # Restaurar k_coef original si se modificó para tetraedros degenerados

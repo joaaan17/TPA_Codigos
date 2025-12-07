@@ -114,6 +114,8 @@ class ShearConstraint(Constraint):
             # Validar corrección antes de aplicar
             if (not math.isnan(delta_p0.x) and not math.isnan(delta_p0.y) and not math.isnan(delta_p0.z) and
                 not math.isinf(delta_p0.x) and not math.isinf(delta_p0.y) and not math.isinf(delta_p0.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p0 = self.clamp_correction(delta_p0)
                 nueva_pos = part0.location + delta_p0
                 # Validar posición resultante
                 if (not math.isnan(nueva_pos.x) and not math.isnan(nueva_pos.y) and not math.isnan(nueva_pos.z)):
@@ -123,6 +125,8 @@ class ShearConstraint(Constraint):
             delta_p1 = grad_x1 * ((w1 / sum_w) * lambda_val)
             if (not math.isnan(delta_p1.x) and not math.isnan(delta_p1.y) and not math.isnan(delta_p1.z) and
                 not math.isinf(delta_p1.x) and not math.isinf(delta_p1.y) and not math.isinf(delta_p1.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p1 = self.clamp_correction(delta_p1)
                 nueva_pos = part1.location + delta_p1
                 if (not math.isnan(nueva_pos.x) and not math.isnan(nueva_pos.y) and not math.isnan(nueva_pos.z)):
                     part1.location = nueva_pos
@@ -131,6 +135,8 @@ class ShearConstraint(Constraint):
             delta_p2 = grad_x2 * ((w2 / sum_w) * lambda_val)
             if (not math.isnan(delta_p2.x) and not math.isnan(delta_p2.y) and not math.isnan(delta_p2.z) and
                 not math.isinf(delta_p2.x) and not math.isinf(delta_p2.y) and not math.isinf(delta_p2.z)):
+                # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+                delta_p2 = self.clamp_correction(delta_p2)
                 nueva_pos = part2.location + delta_p2
                 if (not math.isnan(nueva_pos.x) and not math.isnan(nueva_pos.y) and not math.isnan(nueva_pos.z)):
                     part2.location = nueva_pos

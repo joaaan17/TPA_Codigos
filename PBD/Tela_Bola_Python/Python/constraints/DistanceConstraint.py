@@ -70,6 +70,10 @@ class DistanceConstraint(Constraint):
             math.isinf(correction.x) or math.isinf(correction.y) or math.isinf(correction.z)):
             return
         
+        # CRÍTICO: Clamp de corrección (Müller 2007, Macklin FleX)
+        # Evita correcciones excesivas que causan ondas de choque y colapso
+        correction = self.clamp_correction(correction)
+        
         if not part1.bloqueada:
             nueva_pos1 = part1.location + correction * part1.w
             # Verificar que la nueva posición es válida

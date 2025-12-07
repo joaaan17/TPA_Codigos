@@ -24,14 +24,18 @@ class SphereCollider:
         self.velocity = mathutils.Vector(velocity)
         self.mass = mass
         self.active = True
+        self.is_resting = False  # Estado de reposo: True cuando está prácticamente quieta
+        self.resting_velocity_threshold = 0.3  # Velocidad máxima para considerar "en reposo"
+        self.resting_frames = 0  # Contador de frames en reposo
         
         # Gravedad - se configurará desde fuera para usar el mismo valor que el cubo
         self.gravity = 0.0  # Se establecerá desde fuera
         
         # Parámetros de colisión
-        self.stiffness = 0.5  # Rigidez de la colisión (0-1)
-        self.restitution = 0.3  # Coeficiente de restitución (rebote)
-        self.friction = 0.7  # Fricción
+        self.stiffness = 0.6  # Rigidez de la colisión (0-1) - Aumentada para deformar más el cubo
+        self.restitution = 0.05  # Coeficiente de restitución (rebote) - Muy reducido para casi sin rebote
+        self.friction = 0.85  # Fricción - Aumentado para más amortiguamiento
+        self.damping = 0.92  # Amortiguamiento global - Más pérdida de energía (8% por frame)
     
     def set_gravity(self, gravity_value):
         """
@@ -55,12 +59,56 @@ class SphereCollider:
         """
         Actualizar posición de la esfera según su velocidad
         NO aplica gravedad aquí - la gravedad se aplica antes, igual que al cubo
+        NO aplica damping aquí - el damping se aplica después del solver para no interferir con la gravedad
         """
         if not self.active:
             return
         
-        # Solo actualizar posición basándose en la velocidad actual
+        # Solo actualizar posición basándose en la velocidad actual (sin damping)
         self.center += self.velocity * dt
+    
+    def apply_damping(self, dt):
+        """
+        Aplicar damping a la velocidad de la esfera
+        Se debe llamar DESPUÉS del solver, no durante la predicción
+        Solo aplica damping a velocidades horizontales para no interferir con la gravedad vertical
+        """
+        if not self.active:
+            return
+        
+        # Detectar estado de reposo: si la velocidad es muy baja
+        velocity_magnitude = self.velocity.length
+        if velocity_magnitude < self.resting_velocity_threshold:
+            self.resting_frames += 1
+            # Requiere 5 frames consecutivos en reposo para activar "resting"
+            if self.resting_frames >= 5:
+                self.is_resting = True
+        else:
+            self.resting_frames = 0
+            self.is_resting = False
+        
+        # Aplicar damping más agresivo si está en reposo
+        if self.is_resting:
+            # En reposo: reducir mucho más el movimiento horizontal para evitar deslizamiento
+            resting_damping = 0.7  # Reducir 30% por frame en reposo (muy agresivo)
+            self.velocity.x *= resting_damping
+            self.velocity.y *= resting_damping
+            
+            # Si está en reposo y la velocidad vertical es muy baja, detenerla completamente
+            if abs(self.velocity.z) < 0.2:
+                self.velocity.z = 0.0
+        else:
+            # No en reposo: damping normal para movimiento horizontal
+            self.velocity.x *= self.damping
+            self.velocity.y *= self.damping
+        
+        # Damping vertical solo si está en contacto o rebotando (velocidad positiva = rebotando)
+        # Si está cayendo (velocidad negativa), no aplicar damping para que acelere por gravedad
+        if self.velocity.z > 0:  # Rebotando hacia arriba
+            # Damping más fuerte para rebotes (reducir más)
+            bounce_damping = self.damping * 0.9  # Damping extra para rebotes (92% * 90% = 82.8%)
+            self.velocity.z *= bounce_damping  # Reducir rebote más agresivamente
+        # Si velocidad.z < 0 (cayendo), NO aplicar damping para que acelere por gravedad
     
     def check_collision(self, particle_location):
         """
