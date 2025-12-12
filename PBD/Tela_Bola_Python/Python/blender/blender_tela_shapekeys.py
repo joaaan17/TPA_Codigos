@@ -169,7 +169,8 @@ def init_properties():
         description="Tipo de simulación a ejecutar",
         items=[
             ('CLOTH', "Tela", "Simulación de tela con restricciones de distancia, bending y shear"),
-            ('VOLUME_CUBE', "Cubo Volumen", "Simulación de cubo con restricciones de volumen")
+            ('VOLUME_CUBE', "Cubo Volumen", "Simulación de cubo con restricciones de volumen"),
+            ('VOLUME_SPHERE', "Esfera Volumen", "Simulación de esfera con restricciones de volumen")
         ],
         default='CLOTH'
     )
@@ -242,6 +243,61 @@ def init_properties():
         default=3,
         min=2,
         max=15
+    )
+    
+    # ===== PROPIEDADES PARA ESFERA DE VOLUMEN (PBD Sphere) =====
+    scene.pbd_sphere_pbd_radius = bpy.props.FloatProperty(
+        name="Radio Esfera PBD",
+        description="Radio de la esfera PBD en metros",
+        default=0.5,
+        min=0.1,
+        max=5.0
+    )
+    
+    scene.pbd_sphere_subdivisions = bpy.props.IntProperty(
+        name="Subdivisiones Esfera",
+        description="Número de subdivisiones por eje del grid (3 = 3x3x3, 4 = 4x4x4, etc.)",
+        default=4,
+        min=2,
+        max=10
+    )
+    
+    scene.pbd_sphere_density = bpy.props.FloatProperty(
+        name="Densidad",
+        description="Densidad del material de la esfera (kg/m³)",
+        default=100.0,
+        min=1.0,
+        max=10000.0
+    )
+    
+    scene.pbd_sphere_volume_stiffness = bpy.props.FloatProperty(
+        name="Stiffness Volumen Local",
+        description="Rigidez de las restricciones de volumen por tetraedro [0, 1]",
+        default=0.8,
+        min=0.0,
+        max=1.0
+    )
+    
+    scene.pbd_sphere_global_volume_stiffness = bpy.props.FloatProperty(
+        name="Stiffness Volumen Global",
+        description="Rigidez de la restricción de volumen global [0, 1]. 0 = desactivado",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    scene.pbd_sphere_use_global_volume = bpy.props.BoolProperty(
+        name="Usar Volumen Global",
+        description="Activar restricción de volumen global para la esfera",
+        default=False
+    )
+    
+    scene.pbd_sphere_start_height = bpy.props.FloatProperty(
+        name="Altura Inicial",
+        description="Altura inicial Z de la esfera (en metros)",
+        default=2.0,
+        min=0.0,
+        max=20.0
     )
     
     # ===== PROPIEDADES PARA ESFERA DE COLISIÓN =====
@@ -373,6 +429,35 @@ class PBD_CLOTH_PT_Panel(bpy.types.Panel):
                 box.prop(scene, "pbd_sphere_radius")
                 box.prop(scene, "pbd_sphere_mass")
         
+        elif mode == 'VOLUME_SPHERE':
+            # ===== PANEL PARA MODO ESFERA VOLUMEN =====
+            # Parámetros de la esfera
+            box = layout.box()
+            box.label(text="Parámetros de la Esfera:", icon='MESH_UVSPHERE')
+            box.prop(scene, "pbd_sphere_pbd_radius")
+            box.prop(scene, "pbd_sphere_subdivisions")
+            box.prop(scene, "pbd_sphere_density")
+            
+            # Stiffness de volumen
+            box = layout.box()
+            box.label(text="Stiffness Volumen:", icon='MODIFIER_ON')
+            box.prop(scene, "pbd_sphere_volume_stiffness")
+            box.prop(scene, "pbd_sphere_use_global_volume")
+            if scene.pbd_sphere_use_global_volume:
+                box.prop(scene, "pbd_sphere_global_volume_stiffness")
+            
+            # Posición inicial
+            box = layout.box()
+            box.label(text="Posición Inicial:", icon='OBJECT_ORIGIN')
+            box.prop(scene, "pbd_sphere_start_height")
+            
+            # Suelo
+            box = layout.box()
+            box.label(text="Suelo:", icon='MESH_PLANE')
+            box.prop(scene, "pbd_floor_enabled")
+            if scene.pbd_floor_enabled:
+                box.prop(scene, "pbd_floor_height")
+        
         # ===== PARÁMETROS COMUNES =====
         # Solver
         box = layout.box()
@@ -400,6 +485,10 @@ class PBD_CLOTH_PT_Panel(bpy.types.Panel):
                 box.operator("pbd_cloth.simular_shapekeys", text="Simular Tela", icon='PLAY')
             elif mode == 'VOLUME_CUBE':
                 box.operator("pbd_cloth.simular_cubo_volumen", text="Simular Cubo Volumen", icon='PLAY')
+            elif mode == 'VOLUME_SPHERE':
+                box.operator("pbd_cloth.simular_esfera_volumen", text="Simular Esfera Volumen", icon='PLAY')
+            elif mode == 'VOLUME_SPHERE':
+                box.operator("pbd_cloth.simular_esfera_volumen", text="Simular Esfera Volumen", icon='PLAY')
         
         # Botón de diagnóstico
         box = layout.box()
@@ -561,6 +650,23 @@ class PBD_CLOTH_OT_SimularCuboVolumen(bpy.types.Operator):
     def execute(self, context):
         try:
             simular_cubo_volumen(context)
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
+
+
+class PBD_CLOTH_OT_SimularEsferaVolumen(bpy.types.Operator):
+    """Operador para simular esfera con restricciones de volumen"""
+    bl_idname = "pbd_cloth.simular_esfera_volumen"
+    bl_label = "Simular Esfera Volumen"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        try:
+            simular_esfera_volumen(context)
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"Error: {str(e)}")
@@ -1908,6 +2014,14 @@ def simular_cubo_volumen(context):
         except:
             pass
     
+    # CRÍTICO: Reimportar también Constraint para asegurar que se recarga sin el print
+    try:
+        from core.Constraint import Constraint
+        importlib.reload(sys.modules.get('core.Constraint', None))
+        print(f"   ✓ Constraint recargado (sin prints)")
+    except:
+        pass
+    
     # Reimportar PBDSystem
     from core.PBDSystem import PBDSystem
     
@@ -2394,10 +2508,12 @@ def simular_cubo_volumen(context):
             
             # Aplicar gravedad (en dirección Z negativo para que caiga hacia abajo)
             # En Blender, Z es el eje vertical (arriba/abajo)
-            gravity = mathutils.Vector((0.0, 0.0, gravity_value))  # gravity_value negativo = hacia abajo
+            # Para que caiga hacia abajo, la fuerza debe ser negativa en Z
+            # Si gravity_value es positivo (ej: 9.8), lo hacemos negativo para que caiga
+            gravity_force = -abs(gravity_value)  # Asegurar que siempre sea negativo
             for particle in system.particles:
                 if not particle.bloqueada:
-                    particle.force += gravity * particle.masa
+                    particle.force.z += gravity_force * particle.masa
             
             # Aplicar gravedad a la esfera también (mismo valor y momento que el cubo)
             if scene.pbd_sphere_enabled and sphere_collider is not None:
@@ -2606,6 +2722,244 @@ def simular_cubo_volumen(context):
 
 
 # ============================================
+# FUNCIÓN DE SIMULACIÓN DE ESFERA VOLUMEN
+# ============================================
+def simular_esfera_volumen(context):
+    """Simular esfera con restricciones de volumen y guardar en Shape Keys"""
+    import bmesh
+    import sys
+    import importlib
+    from geometry.SphereVolume import crear_esfera_volumen
+    from geometry.SphereSurfaceExtractor import extraer_superficie_tetraedros, generar_mesh_blender, actualizar_mesh_blender_desde_particulas
+    
+    scene = context.scene
+    
+    # Obtener parámetros
+    radio = scene.pbd_sphere_pbd_radius
+    densidad = scene.pbd_sphere_density
+    stiffness_volumen = scene.pbd_sphere_volume_stiffness
+    stiffness_global = scene.pbd_sphere_global_volume_stiffness if scene.pbd_sphere_use_global_volume else None
+    if stiffness_global is not None and stiffness_global < 0.05:
+        stiffness_global = 0.05  # Mínimo para evitar colapso
+    solver_iterations = scene.pbd_cloth_solver_iterations
+    num_frames = scene.pbd_cloth_num_frames
+    DT = 1.0 / 60.0
+    gravity_value = scene.pbd_cloth_gravity
+    floor_height = scene.pbd_floor_height if scene.pbd_floor_enabled else None
+    start_height = scene.pbd_sphere_start_height
+    subdivisiones = scene.pbd_sphere_subdivisions
+    
+    print("\n" + "=" * 60)
+    print("🎬 INICIANDO SIMULACIÓN ESFERA VOLUMEN")
+    print("=" * 60)
+    print(f"   Radio: {radio}m")
+    print(f"   Subdivisiones: {subdivisiones}")
+    print(f"   Densidad: {densidad} kg/m³")
+    print(f"   Stiffness volumen: {stiffness_volumen}")
+    print(f"   Stiffness volumen global: {stiffness_global if stiffness_global else 'NO activo'}")
+    print(f"   Frames: {num_frames}")
+    print(f"   Iteraciones solver: {solver_iterations}")
+    print(f"   Gravedad: {gravity_value} m/s² (dirección Z negativo - hacia abajo)")
+    print(f"   Altura inicial: {start_height}m")
+    if floor_height is not None:
+        print(f"   Suelo habilitado a altura: {floor_height}m")
+    else:
+        print(f"   Suelo: NO habilitado")
+    
+    # ===== PASO 1: Eliminar objeto anterior =====
+    obj_anterior = bpy.data.objects.get("VolumeSphere")
+    if obj_anterior:
+        if obj_anterior.data.shape_keys:
+            while obj_anterior.data.shape_keys and len(obj_anterior.data.shape_keys.key_blocks) > 0:
+                obj_anterior.shape_key_remove(obj_anterior.active_shape_key)
+        for collection in obj_anterior.users_collection:
+            collection.objects.unlink(obj_anterior)
+        mesh_anterior = obj_anterior.data
+        bpy.data.objects.remove(obj_anterior)
+        if mesh_anterior:
+            bpy.data.meshes.remove(mesh_anterior)
+        print(f"   ✓ Objeto anterior eliminado")
+    
+    # ===== PASO 2: Recargar módulos =====
+    modules_to_reload = [
+        'geometry.SphereVolume',
+        'geometry.SphereSurfaceExtractor',
+        'core.PBDSystem',
+        'core.Particle',
+        'core.Constraint',
+        'constraints.DistanceConstraint',
+        'constraints.VolumeConstraintTet',
+        'constraints.VolumeConstraintGlobal'
+    ]
+    
+    for mod_name in modules_to_reload:
+        if mod_name in sys.modules:
+            importlib.reload(sys.modules[mod_name])
+    
+    from geometry.SphereVolume import crear_esfera_volumen
+    from core.PBDSystem import PBDSystem
+    
+    # ===== PASO 3: Crear sistema PBD con esfera =====
+    resultado = crear_esfera_volumen(
+        radio=radio,
+        densidad=densidad,
+        stiffness_volumen=stiffness_volumen,
+        stiffness_global=stiffness_global,
+        subdivisiones=subdivisiones
+    )
+    
+    system, tetraedros_indices, particulas_grid, particulas_pos = resultado
+    
+    # Ajustar posición inicial (mover arriba)
+    for particle in system.particles:
+        particle.location.z += start_height
+        particle.last_location.z += start_height
+    
+    system.set_n_iters(solver_iterations)
+    
+    print(f"   ✓ Sistema PBD creado: {len(system.particles)} partículas, {len(system.constraints)} restricciones")
+    
+    # ===== PASO 3.5: Crear suelo si está habilitado =====
+    if floor_height is not None:
+        crear_suelo_blender(floor_height)
+        print(f"   ✓ Suelo creado a altura {floor_height}m")
+    
+    # ===== PASO 3.5: Crear suelo si está habilitado =====
+    if floor_height is not None:
+        crear_suelo_blender(floor_height)
+        print(f"   ✓ Suelo creado a altura {floor_height}m")
+    
+    # ===== PASO 4: Crear mesh inicial =====
+    # Extraer superficie - usar un umbral más permisivo para capturar todas las caras externas
+    # El umbral debería ser un porcentaje del radio (partículas cerca de la superficie)
+    triangulos_superficie = extraer_superficie_tetraedros(
+        tetraedros_indices, 
+        system.particles, 
+        umbral_distancia=radio * 0.8  # Reducido a 0.8 para capturar más triángulos
+    )
+    
+    if len(triangulos_superficie) == 0:
+        print(f"   ⚠️ ADVERTENCIA: No se extrajeron triángulos de superficie")
+        print(f"   🔍 Intentando sin filtro de distancia...")
+        triangulos_superficie = extraer_superficie_tetraedros(
+            tetraedros_indices, 
+            system.particles, 
+            umbral_distancia=None
+        )
+        print(f"   ✓ Encontrados {len(triangulos_superficie)} triángulos sin filtro")
+    
+    # Deduplicar triángulos
+    from geometry.SphereSurfaceExtractor import deduplicar_triangulos
+    triangulos_superficie = deduplicar_triangulos(triangulos_superficie)
+    
+    mesh, bm = generar_mesh_blender(
+        system.particles,
+        triangulos_superficie,
+        nombre="VolumeSphereMesh"
+    )
+    
+    obj = bpy.data.objects.new("VolumeSphere", mesh)
+    bpy.context.collection.objects.link(obj)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    
+    # Asegurar que el mesh se muestra en modo sólido
+    obj.display_type = 'SOLID'
+    
+    print(f"   ✓ Mesh creado con {len(triangulos_superficie)} triángulos de superficie")
+    
+    # ===== PASO 5: Configurar Shape Keys =====
+    # CRÍTICO: Asegurar que el mesh base esté actualizado antes de crear shape keys
+    # Esto evita problemas de sincronización entre mesh y shape keys
+    mesh.update()
+    
+    if not obj.data.shape_keys:
+        obj.shape_key_add(name="Basis")
+    
+    # Asegurar que el Basis tenga las posiciones correctas
+    basis_key = obj.data.shape_keys.key_blocks[0]  # Basis es siempre el primero
+    for i in range(min(len(basis_key.data), len(system.particles))):
+        pos = system.particles[i].location
+        basis_key.data[i].co = mathutils.Vector((pos.x, pos.y, pos.z))
+    
+    # ===== PASO 6: Simulación =====
+    scene.pbd_cloth_is_simulating = True
+    
+    try:
+        for frame in range(1, num_frames + 1):
+            # Aplicar gravedad (en dirección Z negativo para que caiga hacia abajo)
+            # En Blender, Z es el eje vertical (arriba/abajo)
+            # Para que caiga hacia abajo, la fuerza debe ser negativa en Z
+            # Si gravity_value es positivo (ej: 9.8), lo hacemos negativo para que caiga
+            gravity_force = -abs(gravity_value)  # Asegurar que siempre sea negativo
+            for particle in system.particles:
+                if not particle.bloqueada:
+                    particle.force.z += gravity_force * particle.masa
+            
+            # Ejecutar solver
+            system.run(
+                DT,
+                apply_damping=True,
+                use_plane_col=(floor_height is not None),
+                use_sphere_col=False,
+                floor_height=floor_height
+            )
+            
+            # Limpiar fuerzas
+            for particle in system.particles:
+                particle.force = mathutils.Vector((0.0, 0.0, 0.0))
+            
+            # CRÍTICO: Actualizar Shape Keys directamente, NO el mesh base
+            # Esto evita el warning de CD_SHAPEKEY layers
+            shape_key_name = f"Frame_{frame:04d}"
+            
+            # Crear Shape Key si no existe
+            if shape_key_name not in obj.data.shape_keys.key_blocks:
+                shape_key = obj.shape_key_add(name=shape_key_name)
+            else:
+                shape_key = obj.data.shape_keys.key_blocks[shape_key_name]
+            
+            shape_key.value = 1.0
+            
+            # Actualizar posiciones del Shape Key directamente desde las partículas
+            # NO actualizar el mesh base con bmesh durante la simulación
+            for i in range(min(len(shape_key.data), len(system.particles))):
+                pos = system.particles[i].location
+                shape_key.data[i].co = mathutils.Vector((pos.x, pos.y, pos.z))
+            
+            # Solo actualizar el mesh base (Basis) una vez al final si es necesario
+            # Durante la simulación, solo actualizamos los shape keys
+            
+            if frame % 10 == 0:
+                print(f"   ✅ Frame {frame}/{num_frames}")
+        
+        print(f"\n   ✅ Simulación completada")
+        
+        # Actualizar el mesh base (Basis) con la posición final
+        # Esto solo se hace al final para asegurar consistencia
+        bm.verts.ensure_lookup_table()
+        for i, vert in enumerate(bm.verts):
+            if i < len(system.particles):
+                vert.co = system.particles[i].location.copy()
+        bm.normal_update()
+        # CRÍTICO: No actualizar el mesh base durante la simulación para evitar warnings
+        # Solo se actualiza al final si es necesario
+        # bm.to_mesh(mesh)  # Comentado para evitar warnings de shape keys
+        mesh.update()
+        
+        # Crear animación
+        crear_animacion_shapekeys(obj, num_frames)
+        
+    except Exception as e:
+        print(f"\n   ❌ ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+    finally:
+        scene.pbd_cloth_is_simulating = False
+
+
+# ============================================
 # REGISTRO DE CLASES
 # ============================================
 classes = [
@@ -2614,7 +2968,8 @@ classes = [
     PBD_CLOTH_OT_ResetSimulando,
     PBD_CLOTH_OT_DiagnosticarKeyframes,
     PBD_CLOTH_OT_ForzarActualizacion,
-    PBD_CLOTH_OT_SimularCuboVolumen
+    PBD_CLOTH_OT_SimularCuboVolumen,
+    PBD_CLOTH_OT_SimularEsferaVolumen
 ]
 
 

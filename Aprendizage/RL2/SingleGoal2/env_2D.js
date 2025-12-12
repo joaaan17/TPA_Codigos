@@ -14,7 +14,8 @@ class FrozenLake {
         this.totalReward = 0;
         this.done = false;
         this.fellInHole = false;
-        this.previousDistance = this._distanceToGoal(this.state);
+        // Inicializar previousDistance usando Manhattan para shaped rewards
+        this.previousDistance = this._manhattanDistance(this.state);
         this._generateHoles();
     }
     
@@ -77,7 +78,8 @@ class FrozenLake {
         this.totalReward = 0;
         this.done = false;
         this.fellInHole = false;
-        this.previousDistance = this._distanceToGoal(this.state);
+        // Resetear previousDistance usando Manhattan para shaped rewards
+        this.previousDistance = this._manhattanDistance(this.state);
         return this.state;
     }
 
@@ -87,23 +89,24 @@ class FrozenLake {
             return action; // Sin slippery, acción determinista
         }
 
-        // Con slippery: 33% probabilidad de cada acción (intentada, perpendicular izquierda, perpendicular derecha)
+        // Con slippery: 33% probabilidad de cada acción (intentada, perpendicular 1, perpendicular 2)
+        // Esto hace el aprendizaje más difícil porque el movimiento es no determinista
         const rand = Math.random();
         
         // Acciones: 0=Arriba, 1=Abajo, 2=Izquierda, 3=Derecha
         if (rand < 0.33) {
-            return action; // Acción intentada
+            return action; // Acción intentada (33% probabilidad)
         } else if (rand < 0.67) {
-            // Acción perpendicular (izquierda)
+            // Primera acción perpendicular (33% probabilidad)
             if (action === 0) return 2; // Arriba -> Izquierda
-            if (action === 1) return 3; // Abajo -> Derecha
-            if (action === 2) return 1; // Izquierda -> Abajo
-            if (action === 3) return 0; // Derecha -> Arriba
-        } else {
-            // Acción perpendicular (derecha)
-            if (action === 0) return 3; // Arriba -> Derecha
             if (action === 1) return 2; // Abajo -> Izquierda
             if (action === 2) return 0; // Izquierda -> Arriba
+            if (action === 3) return 0; // Derecha -> Arriba
+        } else {
+            // Segunda acción perpendicular (33% probabilidad)
+            if (action === 0) return 3; // Arriba -> Derecha
+            if (action === 1) return 3; // Abajo -> Derecha
+            if (action === 2) return 1; // Izquierda -> Abajo
             if (action === 3) return 1; // Derecha -> Abajo
         }
     }
@@ -142,8 +145,8 @@ class FrozenLake {
         let reward = 0;
         
         if (this.grid[this.state[0]][this.state[1]] === 1) {
-            // Cayó en un agujero
-            reward = -1;
+            // Cayó en un agujero - recompensa 0 (sin penalización)
+            reward = 0;
             this.done = true;
             this.fellInHole = true;
         } else if (this._arraysEqual(this.state, this.goal)) {
@@ -153,15 +156,23 @@ class FrozenLake {
         } else {
             // Hielo seguro
             if (this.useShapedRewards) {
-                // Recompensas con forma: pequeña recompensa por acercarse al objetivo
-                const currentDistance = this._distanceToGoal(this.state);
-                const maxDistance = this._distanceToGoal([0, 0]); // Distancia máxima (desde inicio)
+                // Recompensas con forma: recompensa por acercarse al objetivo
+                // Usar distancia Manhattan (más intuitiva para grid)
+                const currentDistance = this._manhattanDistance(this.state);
+                const maxDistance = this._manhattanDistance([0, 0]); // Distancia máxima (desde inicio)
                 
-                // Recompensa proporcional a cuánto se acercó (normalizada)
+                // Recompensa proporcional a cuánto se acercó (solo positiva si se acerca)
                 const distanceImprovement = this.previousDistance - currentDistance;
-                const normalizedReward = (distanceImprovement / maxDistance) * 0.1; // Factor pequeño para no dominar
                 
-                reward = normalizedReward;
+                // Solo dar recompensa positiva si el agente se acerca al objetivo
+                // Factor más grande (0.5) para que tenga impacto real en el aprendizaje
+                if (distanceImprovement > 0) {
+                    reward = (distanceImprovement / maxDistance) * 0.5;
+                } else {
+                    // Si se aleja, recompensa pequeña negativa (penalización suave)
+                    reward = (distanceImprovement / maxDistance) * 0.1;
+                }
+                
                 this.previousDistance = currentDistance;
             } else {
                 // Recompensa clásica: 0

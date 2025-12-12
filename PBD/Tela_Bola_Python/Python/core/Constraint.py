@@ -53,7 +53,6 @@ class Constraint:
             self.k_coef = 1.0 - pow(1.0 - self.stiffness, 1.0 / n)
         else:
             self.k_coef = self.stiffness
-        print(f"Fijamos {n} iteraciones --> k = {self.stiffness:.4f}, k' = {self.k_coef:.4f}")
     
     def proyecta_restriccion(self):
         """
